@@ -95,6 +95,8 @@ struct RegSpecs
 
 struct Registers
 {
+    using enum reg_type_t;
+
     public:
         Registers(uint16_t who_am_i,
                   uint8_t hw_version_major, uint8_t hw_version_minor,

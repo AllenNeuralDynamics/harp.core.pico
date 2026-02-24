@@ -1,16 +1,19 @@
 #ifndef HARP_MESSAGE_H
 #define HARP_MESSAGE_H
 #include <reg_types.h>
+#include <utility> // for std::to_underlying
 
 #define MAX_PACKET_SIZE (255) // unused?
 
 enum msg_type_t: uint8_t
 {
+    ERROR_MASK = 0x80,
+
     READ = 1,
     WRITE = 2,
     EVENT = 3,
-    READ_ERROR = 9,
-    WRITE_ERROR = 10
+    READ_ERROR = READ | ERROR_MASK,
+    WRITE_ERROR = WRITE | ERROR_MASK
 };
 
 
@@ -19,6 +22,8 @@ enum msg_type_t: uint8_t
 #pragma pack(push, 1)
 struct msg_header_t
 {
+    using enum reg_type_t;
+
     msg_type_t type;
     uint8_t raw_length;
     uint8_t address;
@@ -27,7 +32,8 @@ struct msg_header_t
 
     // (Inline) Member functions:
     bool has_timestamp()
-    {return bool(payload_type & HAS_TIMESTAMP);}
+    {return bool(std::to_underlying(payload_type) &
+                 std::to_underlying(HAS_TIMESTAMP));}
 
     uint8_t payload_length()
     {return has_timestamp()? raw_length - 10: raw_length - 4;}

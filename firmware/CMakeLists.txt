@@ -15,8 +15,8 @@ endif()
 
 project(harp_core_rp2040)
 
-# Use modern conventions like std::invoke
-set(CMAKE_CXX_STANDARD 17)
+# Use modern conventions like `using enum <enum_name>` (20) and `std::to_underlying` (23)
+set(CMAKE_CXX_STANDARD 23)
 
 add_library(core_registers
     src/core_registers.cpp

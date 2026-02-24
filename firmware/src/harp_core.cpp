@@ -256,7 +256,8 @@ void HarpCore::send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
     uint8_t raw_length = num_bytes + 10;
     uint8_t checksum = 0;
     msg_header_t header{reply_type, raw_length, reg_name, 255,
-                        (reg_type_t)(HAS_TIMESTAMP | payload_type)};
+                        reg_type_t(std::to_underlying(HAS_TIMESTAMP) |
+                                   std::to_underlying(payload_type))};
 #ifdef DEBUG_HARP_MSG_OUT
     printf("Sending msg: \r\n");
     printf("  type: %d\r\n", header.type);
@@ -333,6 +334,15 @@ void HarpCore::write_to_read_only_reg_error(msg_t& msg)
     printf("Error: Reg address %d is read-only.\r\n", msg.header.address);
 #endif
     send_harp_reply(WRITE_ERROR, msg.header.address);
+}
+
+void HarpCore::read_from_write_only_reg_error(uint8_t address)
+{
+#ifdef DEBUG_HARP_MSG_IN
+    printf("Error: Reg address %d is write-only.\r\n", address);
+#endif
+    // Send a zero-length reply to keep the transaction short.
+    send_harp_reply(READ_ERROR, address, nullptr, 0, U8);
 }
 
 void HarpCore::set_timestamp_regs(uint64_t harp_time_us)

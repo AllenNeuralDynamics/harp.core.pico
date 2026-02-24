@@ -7,6 +7,7 @@
 #include <arm_regs.h>
 #include <cstring> // for memcpy
 #include <tusb.h>
+#include <utility> // for std::to_underlying
 
 // Pico-specific includes.
 #include <hardware/structs/timer.h>
@@ -46,6 +47,7 @@ struct RegFnPair
  */
 class HarpCore
 {
+using enum reg_type_t;
 // Make constructor protected to prevent creating instances outside of init().
 protected: // protected, but not private, to enable derived class usage.
     HarpCore(uint16_t who_am_i,
@@ -139,11 +141,23 @@ public:
  */
     static void read_reg_generic(uint8_t reg_name);
 
+
 /**
- * \brief write handler function. Sends a harp reply indicating a write error
- *      to the specified register.
+ * \brief read-error handler function. Send a zero-length payload harp reply
+ *  from the specified register with the reply type set as  `READ_ERROR` to
+ *  indicate a read error.
+ * \note This function is provided for convenience where no payload is
+ *  necessary. For alternate circumstances where a specific payload must be
+ *  used, invoke send_harp_reply() instead.
+ */
+    static void read_from_write_only_reg_error(uint8_t reg_name);
+
+/**
+ * \brief write-error handler function. Send a harp reply indicating a write
+ *  error to the specified register.
  */
     static void write_to_read_only_reg_error(msg_t& msg);
+
 
 /**
  * \brief update local (app or core) register data with the payload provided in
