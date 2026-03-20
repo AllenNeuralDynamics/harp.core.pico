@@ -7,7 +7,7 @@
 
 enum msg_type_t: uint8_t
 {
-    ERROR_MASK = 0x80,
+    ERROR_MASK = 0x08,
 
     READ = 1,
     WRITE = 2,
