@@ -103,7 +103,15 @@ For more information on reading data or writing commands to your custom new harp
 
 ---
 # Developer Notes
-
+### Bumping the Version
+There are two semantic versions to keep track of:
+* `HARP_VERSION_MAJOR`, `*_MINOR`, `*_PATCH`
+  * tracks the [Harp Protocol Version](https://harp-tech.org/protocol/BinaryProtocol-8bit.html#release-notes) that this library best implements.
+  * Bump this version when this library implements features in a future Harp Protocol Version.
+* `PICO_CORE_VERSION_MAJOR`, `*_MINOR`, `*_PATCH`
+  * is the version of this project. This version can vary freely from `HARP_VERSION_*` and is for tracking the API of the project.
+  * Bump this version when you make changes to this library.
+ 
 ### Debugging with printf
 The Harp Core consumes the USB serial port, so `printf` messages must be rerouted to an available UART port.
 The Pico SDK makes this step fairly straightforward. Before calling `printf` you must first setup a UART port with:

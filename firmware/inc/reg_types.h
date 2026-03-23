@@ -1,14 +1,13 @@
 #ifndef REG_TYPES_H
 #define REG_TYPES_H
 
-// Payload flags. These need their type enforced.
-#define IS_SIGNED ((uint8_t)0x80)
-#define IS_FLOAT ((uint8_t)0x40)
-#define HAS_TIMESTAMP ((uint8_t)0x10)
-
-
-enum reg_type_t: uint8_t
+enum class reg_type_t: uint8_t
 {
+    IS_SIGNED = 0x80,
+    IS_FLOAT = 0x40,
+    HAS_TIMESTAMP = 0x10,
+
+
     U8 = 1,
     S8 = IS_SIGNED | U8,
     U16 = 2,
