@@ -241,8 +241,8 @@ void HarpCore::update_state(bool force, op_mode_t forced_next_state)
 const RegSpecs& HarpCore::reg_address_to_specs(uint8_t address)
 {
     if (address < CORE_REG_COUNT)
-        return regs_.address_to_specs[address];
-    return address_to_app_reg_specs(address); // virtual. Implemented by app.
+        return self->regs_.address_to_specs[address];
+    return self->address_to_app_reg_specs(address); // virtual. Implemented by app.
 }
 
 void HarpCore::send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
