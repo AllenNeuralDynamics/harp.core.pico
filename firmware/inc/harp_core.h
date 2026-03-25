@@ -18,7 +18,7 @@
 
 // Project version
 inline constexpr size_t PICO_CORE_VERSION_MAJOR = 0;
-inline constexpr size_t PICO_CORE_VERSION_MINOR = 2;
+inline constexpr size_t PICO_CORE_VERSION_MINOR = 3;
 inline constexpr size_t PICO_CORE_VERSION_PATCH = 0;
 
 // Version of the Harp Protocol that this library most closely implements.
