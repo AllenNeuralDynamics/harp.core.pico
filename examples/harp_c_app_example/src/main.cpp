@@ -23,13 +23,11 @@ const uint16_t serial_number = 0xCAFE;
 const size_t app_reg_count = 2;
 
 // Define register contents.
-#pragma pack(push, 1)
 struct RegData
 {
     volatile uint8_t test_byte;  // app register 0
     volatile uint32_t test_uint; // app register 1
 } reg_data;
-#pragma pack(pop)
 
 // Define register "specs."
 RegSpec app_reg_specs[app_reg_count]
