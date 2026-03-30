@@ -40,7 +40,7 @@ HarpCore::HarpCore(uint16_t who_am_i,
     // Populate Harp Core R_UUID with unique id from QSPI Flash.
     pico_unique_board_id_t unique_id;
     pico_get_unique_board_id(&unique_id);
-    memcpy((void*)(&regs.R_UUID[8]), (void*)&(unique_id.id), sizeof(unique_id.id));
+    memcpy(&regs_.R_UUID[8], &(unique_id.id), sizeof(unique_id.id));
 #else
 #pragma warning("Harp Core Register UUID not autodetected for this board.")
 #endif
@@ -147,10 +147,10 @@ void HarpCore::handle_buffered_core_message()
     switch (msg.header.type)
     {
         case READ:
-            reg_func_table_[msg.header.address].read_fn_ptr(msg.header.address);
+            core_reg_specs_[msg.header.address].read_fn_ptr(msg.header.address);
             break;
         case WRITE:
-            reg_func_table_[msg.header.address].write_fn_ptr(msg);
+            core_reg_specs_[msg.header.address].write_fn_ptr(msg);
             break;
     }
     clear_msg();
@@ -238,15 +238,8 @@ void HarpCore::update_state(bool force, op_mode_t forced_next_state)
     self->regs_.r_operation_ctrl_bits.OP_MODE = next_state;
 }
 
-const RegSpecs& HarpCore::reg_address_to_specs(uint8_t address)
-{
-    if (address < CORE_REG_COUNT)
-        return self->regs_.address_to_specs[address];
-    return self->address_to_app_reg_specs(address); // virtual. Implemented by app.
-}
-
 void HarpCore::send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
-                               const volatile uint8_t* data, uint8_t num_bytes,
+                               const volatile void* data, uint8_t num_bytes,
                                reg_type_t payload_type, uint64_t harp_time_us)
 {
     // FIXME: implementation as-is cannot send more than 64 bytes of data
@@ -283,15 +276,15 @@ void HarpCore::send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
         tud_cdc_write_char(byte);
     }
     self->set_timestamp_regs(harp_time_us); // update and push timestamp.
-    for (uint8_t i = 0; i < sizeof(self->regs.R_TIMESTAMP_SECOND); ++i)
+    for (uint8_t i = 0; i < sizeof(self->regs_.R_TIMESTAMP_SECOND); ++i)
     {
-        uint8_t& byte = *(((uint8_t*)(&self->regs.R_TIMESTAMP_SECOND)) + i);
+        uint8_t& byte = *(((uint8_t*)(&self->regs_.R_TIMESTAMP_SECOND)) + i);
         checksum += byte;
         tud_cdc_write_char(byte);
     }
-    for (uint8_t i = 0; i < sizeof(self->regs.R_TIMESTAMP_MICRO); ++i)
+    for (uint8_t i = 0; i < sizeof(self->regs_.R_TIMESTAMP_MICRO); ++i)
     {
-        uint8_t& byte = *(((uint8_t*)(&self->regs.R_TIMESTAMP_MICRO)) + i);
+        uint8_t& byte = *(((uint8_t*)(&self->regs_.R_TIMESTAMP_MICRO)) + i);
         checksum += byte;
         tud_cdc_write_char(byte);
     }
@@ -299,10 +292,10 @@ void HarpCore::send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
     //  changing underneath us?
     for (uint8_t i = 0; i < num_bytes; ++i) // push the payload data.
     {
-        const volatile uint8_t& byte = *(data + i);
+        const volatile uint8_t& byte = *(((uint8_t*)data) + i);
         checksum += byte;
-        tud_cdc_write_char(byte);
     }
+    tud_cdc_write((const void*)data, num_bytes);
     tud_cdc_write_char(checksum); // push the checksum.
     tud_cdc_write_flush();  // Send usb packet, even if not full.
     // Call tud_task to handle case we issue multiple harp replies in a row.
@@ -323,9 +316,9 @@ void HarpCore::write_reg_generic(msg_t& msg)
     if (self->is_muted())
         return;
     const uint8_t& reg_name = msg.header.address;
-    const RegSpecs& specs = self->reg_address_to_specs(msg.header.address);
-    send_harp_reply(WRITE, reg_name, specs.base_ptr, specs.num_bytes,
-                    specs.payload_type);
+    const RegSpec& spec = self->reg_address_to_spec(msg.header.address);
+    send_harp_reply(WRITE, reg_name, spec.base_ptr, spec.num_bytes,
+                    spec.payload_type);
 }
 
 void HarpCore::write_to_read_only_reg_error(msg_t& msg)
@@ -356,12 +349,12 @@ void HarpCore::set_timestamp_regs(uint64_t harp_time_us)
     uint64_t leftover_microseconds;
     uint64_t curr_seconds = divmod_u64u64_rem(harp_time_us, 1'000'000UL,
                                               &leftover_microseconds);
-    self->regs.R_TIMESTAMP_SECOND = uint32_t(curr_seconds); // will not overflow.
-    self->regs.R_TIMESTAMP_MICRO = uint16_t(leftover_microseconds >> 5);
+    self->regs_.R_TIMESTAMP_SECOND = uint32_t(curr_seconds); // will not overflow.
+    self->regs_.R_TIMESTAMP_MICRO = uint16_t(leftover_microseconds >> 5);
 #else
     uint64_t& curr_microseconds = harp_time_us;
-    self->regs.R_TIMESTAMP_SECOND = curr_microseconds / 1'000'000ULL;
-    self->regs.R_TIMESTAMP_MICRO = uint16_t((curr_microseconds % 1'000'000UL)>>5);
+    self->regs_.R_TIMESTAMP_SECOND = curr_microseconds / 1'000'000ULL;
+    self->regs_.R_TIMESTAMP_MICRO = uint16_t((curr_microseconds % 1'000'000UL)>>5);
 #endif
 }
 
@@ -433,7 +426,7 @@ void HarpCore::write_operation_ctrl(msg_t& msg)
     if (state != next_state)
         self->force_state((op_mode_t)next_state);
     // Update register state. Note: DUMP bit always reads as zero.
-    self->regs.R_OPERATION_CTRL = write_byte & ~(0x01 << DUMP_OFFSET);
+    self->regs_.R_OPERATION_CTRL = write_byte & ~(0x01 << DUMP_OFFSET);
     self->set_visual_indicators(bool((write_byte >> VISUAL_EN_OFFSET) & 0x01));
     // Bail early if we are muted.
     if (self->is_muted())

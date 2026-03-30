@@ -2,6 +2,7 @@
 #define HARP_CORE_H
 #include <stdint.h>
 #include <harp_message.h>
+#include <reg_spec.h>
 #include <core_registers.h>
 #include <harp_synchronizer.h>
 #include <arm_regs.h>
@@ -35,17 +36,18 @@ inline constexpr size_t HARP_VERSION_PATCH = 0;
 #define HEARTBEAT_ACTIVE_INTERVAL_US (1'000'000UL)
 #define HEARTBEAT_STANDBY_INTERVAL_US (3'000'000UL)
 
-// Create a typedef to simplify syntax for array of static function ptrs.
-typedef void (*read_reg_fn)(uint8_t reg);
-typedef void (*write_reg_fn)(msg_t& msg);
-
-// Convenience struct for aggregating an array of fn ptrs to handle each
-// register.
-struct RegFnPair
+/**
+ * \brief enum for easier interpretation of the OP_MODE bitfield in the
+ *  R_OPERATION_CTRL register.
+ */
+enum op_mode_t: uint8_t
 {
-    read_reg_fn read_fn_ptr;
-    write_reg_fn  write_fn_ptr;
+    STANDBY = 0,
+    ACTIVE = 1,
+    RESERVED = 2,
+    SPEED = 3
 };
+
 
 /**
  * \brief Harp Core that handles management of common bank registers.
@@ -55,6 +57,8 @@ struct RegFnPair
 class HarpCore
 {
 using enum reg_type_t;
+
+
 // Make constructor protected to prevent creating instances outside of init().
 protected: // protected, but not private, to enable derived class usage.
     HarpCore(uint16_t who_am_i,
@@ -68,6 +72,9 @@ protected: // protected, but not private, to enable derived class usage.
     ~HarpCore();
 
 public:
+
+    static inline constexpr size_t APP_REG_START_ADDRESS = 32;
+
     HarpCore() = delete;  // Disable default constructor.
     HarpCore(HarpCore& other) = delete; // Disable copy constructor.
     void operator=(const HarpCore& other) = delete; // Disable assignment operator.
@@ -108,11 +115,6 @@ public:
  * \warning this should only be accessed if new_msg() is true.
  */
     msg_t get_buffered_msg();
-
-/**
- * \brief reference to the struct of reg values for easy access.
- */
-    RegValues& regs = regs_.regs_;
 
 /**
  * \brief flag indicating whether or not a new message is in the #rx_buffer_.
@@ -172,8 +174,8 @@ public:
  */
     static inline void copy_msg_payload_to_register(msg_t& msg)
     {
-        const RegSpecs& specs = reg_address_to_specs(msg.header.address);
-        memcpy((void*)specs.base_ptr, msg.payload, specs.num_bytes);
+        const RegSpec& spec = reg_address_to_spec(msg.header.address);
+        memcpy((void*)spec.base_ptr, msg.payload, spec.num_bytes);
     }
 
 /**
@@ -191,7 +193,7 @@ public:
  *  outgoing message.
  */
     static void send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
-                                const volatile uint8_t* data, uint8_t num_bytes,
+                                const volatile void* data, uint8_t num_bytes,
                                 reg_type_t payload_type, uint64_t harp_time_us);
 
 /**
@@ -208,7 +210,7 @@ public:
  * \param payload_type `U8`, `S8`, `U16`, `U32`, `U64`, `S64`, or `Float` enum.
  */
     static inline void send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
-                                       const volatile uint8_t* data,
+                                       const volatile void* data,
                                        uint8_t num_bytes,
                                        reg_type_t payload_type)
     {return send_harp_reply(reply_type, reg_name, data, num_bytes, payload_type,
@@ -227,9 +229,9 @@ public:
  */
     static inline void send_harp_reply(msg_type_t reply_type, uint8_t reg_name)
     {
-        const RegSpecs& specs = reg_address_to_specs(reg_name);
-        send_harp_reply(reply_type, reg_name, specs.base_ptr, specs.num_bytes,
-                        specs.payload_type);
+        const RegSpec& spec = reg_address_to_spec(reg_name);
+        send_harp_reply(reply_type, reg_name, spec.base_ptr, spec.num_bytes,
+                        spec.payload_type);
     }
 
 /**
@@ -245,9 +247,9 @@ public:
     static inline void send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
                                        uint64_t harp_time_us)
     {
-        const RegSpecs& specs = reg_address_to_specs(reg_name);
-        send_harp_reply(reply_type, reg_name, specs.base_ptr, specs.num_bytes,
-                        specs.payload_type, harp_time_us);
+        const RegSpec& spec = reg_address_to_spec(reg_name);
+        send_harp_reply(reply_type, reg_name, spec.base_ptr, spec.num_bytes,
+                        spec.payload_type, harp_time_us);
     }
 
 
@@ -256,7 +258,7 @@ public:
  * \brief true if the mute flag has been set in the R_OPERATION_CTRL register.
  */
     static inline bool is_muted()
-    {return bool((self->regs.R_OPERATION_CTRL >> MUTE_RPL_OFFSET) & 0x01);}
+    {return bool((self->regs_.R_OPERATION_CTRL >> MUTE_RPL_OFFSET) & 0x01);}
 
 /**
  * \brief true if the device is synchronized via external CLKIN input.
@@ -298,7 +300,7 @@ public:
     static inline uint32_t harp_time_s()
     {
         self->update_timestamp_regs(); // calls harp_time_us_64() internally.
-        return self->regs.R_TIMESTAMP_SECOND;
+        return self->regs_.R_TIMESTAMP_SECOND;
     }
 
 /**
@@ -397,8 +399,8 @@ public:
  */
     static void set_uuid(uint8_t* uuid, size_t num_bytes, size_t offset = 0)
     {
-        memset(self->regs.R_UUID, 0, sizeof(self->regs.R_UUID));
-        memcpy((void*)(&self->regs.R_UUID[offset]), (void*)uuid, num_bytes);
+        memset(self->regs_.R_UUID, 0, sizeof(self->regs_.R_UUID));
+        memcpy((void*)(&self->regs_.R_UUID[offset]), (void*)uuid, num_bytes);
     }
 
 /**
@@ -407,7 +409,12 @@ public:
  * \details address	is the full address range where 0 is the first core
  *  register, and APP_REG_START_ADDRESS is the first app register.
  */
-    static const RegSpecs& reg_address_to_specs(uint8_t address);
+    static inline const RegSpec& reg_address_to_spec(uint8_t address)
+    {
+        if (address < CORE_REG_COUNT)
+            return self->core_reg_specs_[address];
+        return self->address_to_app_reg_spec(address); // virtual. Implemented by app.
+    }
 
 protected:
 /**
@@ -452,8 +459,8 @@ protected:
  */
     virtual void dump_app_registers(){};
 
-    virtual const RegSpecs& address_to_app_reg_specs(uint8_t address)
-    {return regs_.address_to_specs[0];} // should never happen.
+    virtual const RegSpec& address_to_app_reg_spec(uint8_t address)
+    {return core_reg_specs_[0];} // should never happen.
 
 /**
  * \brief flag indicating whether or not a new message is in the #rx_buffer_.
@@ -617,33 +624,47 @@ private:
     static void write_clock_config(msg_t& msg);
     static void write_timestamp_offset(msg_t& msg);
 
-    Registers regs_; ///< struct of Harp core registers
+    CoreRegValues regs_; ///< struct of Harp core register values.
 
-/**
- * \brief Function table containing the read/write handler functions, one pair
- *  per core register. Index is the register address.
- */
-    RegFnPair reg_func_table_[CORE_REG_COUNT] =
-    {
-        // { <read_fn_ptr>, <write_fn_prt>},
-        {&HarpCore::read_reg_generic, &HarpCore::write_to_read_only_reg_error},
-        {&HarpCore::read_reg_generic, &HarpCore::write_to_read_only_reg_error},
-        {&HarpCore::read_reg_generic, &HarpCore::write_to_read_only_reg_error},
-        {&HarpCore::read_reg_generic, &HarpCore::write_to_read_only_reg_error},
-        {&HarpCore::read_reg_generic, &HarpCore::write_to_read_only_reg_error},
-        {&HarpCore::read_reg_generic, &HarpCore::write_to_read_only_reg_error},
-        {&HarpCore::read_reg_generic, &HarpCore::write_to_read_only_reg_error},
-        {&HarpCore::read_reg_generic, &HarpCore::write_to_read_only_reg_error},
-        {&HarpCore::read_timestamp_second, &HarpCore::write_timestamp_second},
-        {&HarpCore::read_timestamp_microsecond, &HarpCore::write_timestamp_microsecond},
-        {&HarpCore::read_reg_generic, &HarpCore::write_operation_ctrl},
-        {&HarpCore::read_reg_generic, &HarpCore::write_reset_dev},
-        {&HarpCore::read_reg_generic, &HarpCore::write_device_name},
-        {&HarpCore::read_reg_generic, &HarpCore::write_serial_number},
-        {&HarpCore::read_reg_generic, &HarpCore::write_clock_config},
-        {&HarpCore::read_reg_generic, &HarpCore::write_timestamp_offset},
-        {&HarpCore::read_reg_generic, &HarpCore::write_to_read_only_reg_error},
-        {&HarpCore::read_reg_generic, &HarpCore::write_to_read_only_reg_error},
+    // Lookup table. Necessary because register values are not of equal size,
+    //  so we can't index into them directly via enum value.
+    const RegSpec core_reg_specs_[CORE_REG_COUNT] =
+    {RegSpec::U16((void*)&regs_.R_WHO_AM_I,
+                  read_reg_generic, write_to_read_only_reg_error),
+     RegSpec::U8((void*)&regs_.R_HW_VERSION_H,
+                 read_reg_generic, write_to_read_only_reg_error),
+     RegSpec::U8((void*)&regs_.R_HW_VERSION_L,
+                 read_reg_generic, write_to_read_only_reg_error),
+     RegSpec::U8((void*)&regs_.R_ASSEMBLY_VERSION,
+                 read_reg_generic, write_to_read_only_reg_error),
+     RegSpec::U8((void*)&regs_.R_HARP_VERSION_H,
+                 read_reg_generic, write_to_read_only_reg_error),
+     RegSpec::U8((void*)&regs_.R_HARP_VERSION_L,
+                 read_reg_generic, write_to_read_only_reg_error),
+     RegSpec::U8((void*)&regs_.R_FW_VERSION_H,
+                 read_reg_generic, write_to_read_only_reg_error),
+     RegSpec::U8((void*)&regs_.R_FW_VERSION_L,
+                 read_reg_generic, write_to_read_only_reg_error),
+     RegSpec::U32(&regs_.R_TIMESTAMP_SECOND,
+                  read_timestamp_second, write_timestamp_second),
+     RegSpec::U16(&regs_.R_TIMESTAMP_MICRO,
+                  read_timestamp_microsecond, write_timestamp_microsecond),
+     RegSpec::U8(&regs_.R_OPERATION_CTRL,
+                  read_reg_generic, write_operation_ctrl),
+     RegSpec::U8(&regs_.R_RESET_DEF,
+                 read_reg_generic, write_reset_dev),
+     RegSpec::U8Array(&regs_.R_DEVICE_NAME,  sizeof(regs_.R_DEVICE_NAME),
+                      read_reg_generic, write_device_name),
+     RegSpec::U16(&regs_.R_SERIAL_NUMBER,
+                  read_reg_generic, write_serial_number),
+     RegSpec::U8(&regs_.R_CLOCK_CONFIG,
+                 read_reg_generic, write_clock_config),
+     RegSpec::U8(&regs_.R_TIMESTAMP_OFFSET,
+                 read_reg_generic, write_timestamp_offset),
+     RegSpec::U8Array(&regs_.R_UUID, sizeof(regs_.R_UUID),
+                      read_reg_generic, write_to_read_only_reg_error),
+     RegSpec::U8Array(&regs_.R_TAG, sizeof(regs_.R_TAG),
+                      read_reg_generic, write_to_read_only_reg_error),
     };
 };
 

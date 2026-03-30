@@ -1,13 +1,11 @@
-#ifndef REGISTERS_H
-#define REGISTERS_H
+#ifndef CORE_REGISTERS_H
+#define CORE_REGISTERS_H
 #include <stdint.h>
 #include <reg_types.h>
+#include <reg_spec.h>
 #include <core_reg_bits.h>
 #include <cstring>  // for strcpy
 
-static const uint8_t CORE_REG_COUNT = 18;
-
-#define APP_REG_START_ADDRESS (32)
 
 // R_OPERATION_CTRL bitfields.
 #define DUMP_OFFSET (3)
@@ -23,22 +21,10 @@ static const uint8_t CORE_REG_COUNT = 18;
 #define BOOT_EE_OFFSET (7)
 
 /**
- * \brief enum for easier interpretation of the OP_MODE bitfield in the
- *  R_OPERATION_CTRL register.
- */
-enum op_mode_t: uint8_t
-{
-    STANDBY = 0,
-    ACTIVE = 1,
-    RESERVED = 2,
-    SPEED = 3
-};
-
-/**
  * \brief enum where the name is the name of the register and the
  *        value is the address according to the harp protocol spec.
  */
-enum RegName : uint8_t
+enum CoreRegName : uint8_t
 {
     WHO_AM_I = 0,
     HW_VERSION_H = 1, // major hardware version
@@ -60,10 +46,12 @@ enum RegName : uint8_t
     TAG = 17,
 };
 
+/// Number of core registers.
+inline constexpr size_t CORE_REG_COUNT = CoreRegName::TAG - CoreRegName::WHO_AM_I + 1;
 
 // Byte-align struct data so we can send it out serially byte-by-byte.
 #pragma pack(push, 1)
-struct RegValues
+struct CoreRegValues
 {
     const uint16_t R_WHO_AM_I;
     const uint8_t R_HW_VERSION_H;
@@ -83,60 +71,36 @@ struct RegValues
     volatile uint8_t R_TIMESTAMP_OFFSET;
     uint8_t R_UUID[16];
     uint8_t R_TAG[8];
-};
-#pragma pack(pop)
 
-struct RegSpecs
-{
-    volatile uint8_t* const base_ptr;
-    const uint8_t num_bytes;
-    const reg_type_t payload_type;
-};
-
-struct Registers
-{
-    using enum reg_type_t;
-
-    public:
-        Registers(uint16_t who_am_i,
+    // Custom Constructor to initialize strings.
+    CoreRegValues(uint16_t who_am_i,
                   uint8_t hw_version_major, uint8_t hw_version_minor,
                   uint8_t assembly_version,
                   uint8_t harp_version_major, uint8_t harp_version_minor,
                   uint8_t fw_version_major, uint8_t fw_version_minor,
                   uint16_t serial_number, const char name[],
-                  const uint8_t tag[]);
-        ~Registers();
-
-    RegValues regs_;
-
-    // Lookup table. Necessary because register data is not of equal size,
-    //  so we can't index into it directly by enum.
-    // TODO: consider generating this table statically with a template.
-    const RegSpecs address_to_specs[CORE_REG_COUNT] =
-    {{(uint8_t*)&regs_.R_WHO_AM_I,         sizeof(regs_.R_WHO_AM_I),          U16},
-     {(uint8_t*)&regs_.R_HW_VERSION_H,     sizeof(regs_.R_HW_VERSION_H),      U8},
-     {(uint8_t*)&regs_.R_HW_VERSION_L,     sizeof(regs_.R_HW_VERSION_L),      U8},
-     {(uint8_t*)&regs_.R_ASSEMBLY_VERSION, sizeof(regs_.R_ASSEMBLY_VERSION),  U8},
-     {(uint8_t*)&regs_.R_HARP_VERSION_H,   sizeof(regs_.R_HARP_VERSION_H),    U8},
-     {(uint8_t*)&regs_.R_HARP_VERSION_L,   sizeof(regs_.R_HW_VERSION_L),      U8},
-     {(uint8_t*)&regs_.R_FW_VERSION_H,     sizeof(regs_.R_FW_VERSION_H),      U8},
-     {(uint8_t*)&regs_.R_FW_VERSION_L,     sizeof(regs_.R_FW_VERSION_L),      U8},
-     {(uint8_t*)&regs_.R_TIMESTAMP_SECOND, sizeof(regs_.R_TIMESTAMP_SECOND),  U32},
-     {(uint8_t*)&regs_.R_TIMESTAMP_MICRO,  sizeof(regs_.R_TIMESTAMP_MICRO),   U16},
-     {(uint8_t*)&regs_.R_OPERATION_CTRL,   sizeof(regs_.R_OPERATION_CTRL),    U8},
-     {(uint8_t*)&regs_.R_RESET_DEF,        sizeof(regs_.R_RESET_DEF),         U8},
-     {(uint8_t*)&regs_.R_DEVICE_NAME,      sizeof(regs_.R_DEVICE_NAME),       U8},
-     {(uint8_t*)&regs_.R_SERIAL_NUMBER,    sizeof(regs_.R_SERIAL_NUMBER),     U16},
-     {(uint8_t*)&regs_.R_CLOCK_CONFIG,     sizeof(regs_.R_CLOCK_CONFIG),      U8},
-     {(uint8_t*)&regs_.R_TIMESTAMP_OFFSET, sizeof(regs_.R_TIMESTAMP_OFFSET),  U8},
-     {(uint8_t*)&regs_.R_UUID, sizeof(regs_.R_UUID),  U8},
-     {(uint8_t*)&regs_.R_TAG, sizeof(regs_.R_TAG),  U8},
-    };
+                  const uint8_t tag[])
+    :R_WHO_AM_I{who_am_i},
+     R_HW_VERSION_H{hw_version_major},
+     R_HW_VERSION_L{hw_version_minor},
+     R_ASSEMBLY_VERSION{assembly_version},
+     R_HARP_VERSION_H{harp_version_major},
+     R_HARP_VERSION_L{harp_version_minor},
+     R_FW_VERSION_H{fw_version_major},
+     R_FW_VERSION_L{fw_version_minor},
+     R_OPERATION_CTRL{0},
+     R_SERIAL_NUMBER{serial_number},
+     R_UUID{0} // all zeros.
+    {
+        strcpy((char*)R_DEVICE_NAME, name);
+        strcpy((char*)R_TAG, (char*)tag);
+    }
 
     // Syntactic Sugar. Make bitfields for certain registers easier to access.
-    OperationCtrlBits& r_operation_ctrl_bits = *((OperationCtrlBits*)(&regs_.R_OPERATION_CTRL));
-    ResetDefBits& r_reset_def_bits = *((ResetDefBits*)(&regs_.R_RESET_DEF));
-    ClockConfigBits& r_clock_config_bits = *((ClockConfigBits*)(&regs_.R_CLOCK_CONFIG));
+    OperationCtrlBits& r_operation_ctrl_bits = *((OperationCtrlBits*)(&R_OPERATION_CTRL));
+    ResetDefBits& r_reset_def_bits = *((ResetDefBits*)(&R_RESET_DEF));
+    ClockConfigBits& r_clock_config_bits = *((ClockConfigBits*)(&R_CLOCK_CONFIG));
 };
+#pragma pack(pop)
 
-#endif //REGISTERS_H
+#endif //CORE_REGISTERS_H

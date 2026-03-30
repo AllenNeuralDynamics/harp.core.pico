@@ -34,8 +34,7 @@ private:
              uint8_t fw_version_major, uint8_t fw_version_minor,
              uint16_t serial_number, const char name[],
              const uint8_t tag[],
-             void* app_reg_values, RegSpecs* app_reg_specs,
-             RegFnPair* reg_fns, size_t app_reg_count,
+             RegSpec* app_reg_specs, size_t app_reg_count,
              void (* update_fn)(void), void (* reset_fn)(void));
 
     ~HarpCApp();
@@ -55,8 +54,7 @@ public:
                           uint8_t fw_version_major, uint8_t fw_version_minor,
                           uint16_t serial_number, const char name[],
                           const uint8_t tag[],
-                          void* app_reg_values, RegSpecs* app_reg_specs,
-                          RegFnPair* reg_fns, size_t app_reg_count,
+                          RegSpec* app_reg_specs, size_t app_reg_count,
                           void (* update_fn)(void), void (*reset_fn)(void));
 
     static inline HarpCApp* self = nullptr; // pointer to the singleton instance.
@@ -95,14 +93,12 @@ private:
  *  and APP_REG_START_ADDRESS is the first app register.
  * \details used in Harp Core to extract specs for a particular app register.
  */
-    const RegSpecs& address_to_app_reg_specs(uint8_t address)
-    {return reg_specs_[address - APP_REG_START_ADDRESS];}
+    inline const RegSpec& address_to_app_reg_spec(uint8_t address)
+    {return app_reg_specs_[address - APP_REG_START_ADDRESS];}
 
 // Private Members
-    void* reg_values_;
-    RegSpecs* reg_specs_;
-    RegFnPair* reg_fns_;
-    size_t reg_count_;
+    RegSpec* app_reg_specs_;
+    size_t app_reg_count_;
     void (* update_fn_)(void);
     void (* reset_fn_)(void);
 };
