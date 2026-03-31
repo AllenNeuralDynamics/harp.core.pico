@@ -123,13 +123,6 @@ public:
     {return new_msg_;}
 
 /**
- * \brief flag that new message has been handled. Inline.
- * \note Does not affect internal behavior.
- */
-    void clear_msg()
-    {new_msg_ = false;}
-
-/**
  * \brief generic handler function to write a message payload to a core or
  *      app register and issue a harp reply (unless is_muted()).
  * \note this function may be used in cases where no actions must trigger from
@@ -401,6 +394,13 @@ public:
     }
 
 protected:
+/**
+ * \brief flag that new message has been handled. Inline.
+ * \note Does not affect internal behavior.
+ */
+    void clear_msg()
+    {new_msg_ = false;}
+
 /**
  * \brief entry point for handling incoming harp messages to core registers.
  *      Dispatches message to the appropriate handler.
