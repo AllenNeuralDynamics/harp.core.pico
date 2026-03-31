@@ -331,7 +331,7 @@ void HarpCore::read_from_write_only_reg_error(uint8_t address)
     send_harp_reply(READ_ERROR, address, nullptr, 0, U8);
 }
 
-void HarpCore::set_timestamp_regs(uint64_t harp_time_us)
+inline void HarpCore::set_timestamp_regs(uint64_t harp_time_us)
 {
     // Pico implementation:
     // Harp Time is computed as an offset relative to the Pico's main
