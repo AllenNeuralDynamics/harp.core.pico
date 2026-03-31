@@ -18,7 +18,7 @@
 
 // Project version
 inline constexpr size_t PICO_CORE_VERSION_MAJOR = 0;
-inline constexpr size_t PICO_CORE_VERSION_MINOR = 2;
+inline constexpr size_t PICO_CORE_VERSION_MINOR = 3;
 inline constexpr size_t PICO_CORE_VERSION_PATCH = 0;
 
 // Version of the Harp Protocol that this library most closely implements.
@@ -172,7 +172,7 @@ public:
  */
     static inline void copy_msg_payload_to_register(msg_t& msg)
     {
-        const RegSpecs& specs = self->reg_address_to_specs(msg.header.address);
+        const RegSpecs& specs = reg_address_to_specs(msg.header.address);
         memcpy((void*)specs.base_ptr, msg.payload, specs.num_bytes);
     }
 
@@ -227,7 +227,7 @@ public:
  */
     static inline void send_harp_reply(msg_type_t reply_type, uint8_t reg_name)
     {
-        const RegSpecs& specs = self->reg_address_to_specs(reg_name);
+        const RegSpecs& specs = reg_address_to_specs(reg_name);
         send_harp_reply(reply_type, reg_name, specs.base_ptr, specs.num_bytes,
                         specs.payload_type);
     }
@@ -245,7 +245,7 @@ public:
     static inline void send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
                                        uint64_t harp_time_us)
     {
-        const RegSpecs& specs = self->reg_address_to_specs(reg_name);
+        const RegSpecs& specs = reg_address_to_specs(reg_name);
         send_harp_reply(reply_type, reg_name, specs.base_ptr, specs.num_bytes,
                         specs.payload_type, harp_time_us);
     }
@@ -400,6 +400,14 @@ public:
         memset(self->regs.R_UUID, 0, sizeof(self->regs.R_UUID));
         memcpy((void*)(&self->regs.R_UUID[offset]), (void*)uuid, num_bytes);
     }
+
+/**
+ * \brief return a reference to the specified core or app register's specs used
+ *  for issuing a harp reply for that register.
+ * \details address	is the full address range where 0 is the first core
+ *  register, and APP_REG_START_ADDRESS is the first app register.
+ */
+    static const RegSpecs& reg_address_to_specs(uint8_t address);
 
 protected:
 /**
@@ -577,14 +585,6 @@ private:
  * \brief Write the a specified Harp time to the timestamp registers.
  */
     static void set_timestamp_regs(uint64_t harp_time_us);
-
-/**
- * \brief return a reference to the specified core or app register's specs used
- *  for issuing a harp reply for that register.
- * \details address	is the full address range where 0 is the first core
- *  register, and APP_REG_START_ADDRESS is the first app register.
- */
-    const RegSpecs& reg_address_to_specs(uint8_t address);
 
     // core register read handler functions. Handles read operations on those
     // registers. One-per-harp-register where necessary, but read_reg_generic()
