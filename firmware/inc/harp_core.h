@@ -388,22 +388,6 @@ public:
     {return op_mode_t(self->regs_.r_operation_ctrl_bits.OP_MODE);}
 
 /**
- * \brief set the 16 bytews in the R_UUID register. Any unspecified bytes will
- *  be set to zero.
- * Usage:
- * \code
- *  uint64_t uuid = 0xCAFE;
- *  // This works as-is on little-endian systems.
- *  HarpCore::set_uuid((uin8_t*)&uuid, sizeof(uuid));
- * \endcode
- */
-    static void set_uuid(uint8_t* uuid, size_t num_bytes, size_t offset = 0)
-    {
-        memset(self->regs_.R_UUID, 0, sizeof(self->regs_.R_UUID));
-        memcpy((void*)(&self->regs_.R_UUID[offset]), (void*)uuid, num_bytes);
-    }
-
-/**
  * \brief return a reference to the specified core or app register's specs used
  *  for issuing a harp reply for that register.
  * \details address	is the full address range where 0 is the first core
@@ -486,7 +470,7 @@ private:
     {
         // Recompute next whole second (in [us]) based on synchronized time.
         // Round *up* to the nearest whole second.
-#if defined(PICO_RP2040) // Invoke pico-specific fast-integer-division hardware.
+#if defined(PICO_RP2040) // Use 2040-specific integer hardware divider.
         uint64_t remainder;
         uint64_t quotient = divmod_u64u64_rem(curr_harp_time_us, 1'000'000ULL,
                                               &remainder);
@@ -600,6 +584,8 @@ private:
     static void read_timestamp_second(uint8_t reg_name);
     static void read_timestamp_microsecond(uint8_t reg_name);
 
+    static void read_uuid(uint8_t reg_name);
+
 
     // write handler function per core register. Handles write
     // operations to that register.
@@ -619,10 +605,6 @@ private:
 
     static void write_operation_ctrl(msg_t& msg);
     static void write_reset_dev(msg_t& msg);
-    static void write_device_name(msg_t& msg);
-    static void write_serial_number(msg_t& msg);
-    static void write_clock_config(msg_t& msg);
-    static void write_timestamp_offset(msg_t& msg);
 
     CoreRegValues regs_; ///< struct of Harp core register values.
 
@@ -654,15 +636,15 @@ private:
      RegSpec::U8(&regs_.R_RESET_DEF,
                  read_reg_generic, write_reset_dev),
      RegSpec::U8Array(&regs_.R_DEVICE_NAME,  sizeof(regs_.R_DEVICE_NAME),
-                      read_reg_generic, write_device_name),
+                      read_reg_generic, write_reg_generic),
      RegSpec::U16(&regs_.R_SERIAL_NUMBER,
-                  read_reg_generic, write_serial_number),
+                  read_reg_generic, write_reg_generic),
      RegSpec::U8(&regs_.R_CLOCK_CONFIG,
-                 read_reg_generic, write_clock_config),
+                 read_reg_generic, write_reg_generic),
      RegSpec::U8(&regs_.R_TIMESTAMP_OFFSET,
-                 read_reg_generic, write_timestamp_offset),
+                 read_reg_generic, write_reg_generic),
      RegSpec::U8Array(&regs_.R_UUID, sizeof(regs_.R_UUID),
-                      read_reg_generic, write_to_read_only_reg_error),
+                      read_uuid, write_to_read_only_reg_error),
      RegSpec::U8Array(&regs_.R_TAG, sizeof(regs_.R_TAG),
                       read_reg_generic, write_to_read_only_reg_error),
     };

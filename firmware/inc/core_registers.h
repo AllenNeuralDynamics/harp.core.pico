@@ -69,7 +69,7 @@ struct CoreRegValues
     volatile uint16_t R_SERIAL_NUMBER;
     volatile uint8_t R_CLOCK_CONFIG;
     volatile uint8_t R_TIMESTAMP_OFFSET;
-    uint8_t R_UUID[16];
+    volatile uint8_t R_UUID[16];
     uint8_t R_TAG[8];
 
     // Custom Constructor to initialize strings.

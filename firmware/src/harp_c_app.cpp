@@ -74,5 +74,5 @@ void HarpCApp::dump_app_registers()
 {
     for (uint8_t address = APP_REG_START_ADDRESS;
          address < app_reg_count_ + APP_REG_START_ADDRESS; ++address)
-        send_harp_reply(READ, address);
+        reg_address_to_spec(address).read_fn_ptr(address);
 }
