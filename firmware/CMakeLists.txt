@@ -18,10 +18,6 @@ project(harp_core_rp2040)
 # Use modern conventions like `using enum <enum_name>` (20) and `std::to_underlying` (23)
 set(CMAKE_CXX_STANDARD 23)
 
-add_library(core_registers
-    src/core_registers.cpp
-)
-
 add_library(usb_desc
     src/usb_descriptors.c
 )
@@ -39,7 +35,6 @@ add_library(harp_c_app
 )
 
 # Header file locations exposed with target scope for external projects.
-target_include_directories(core_registers PUBLIC inc)
 target_include_directories(usb_desc PUBLIC inc)
 target_include_directories(harp_sync PUBLIC inc)
 target_include_directories(harp_core PUBLIC inc)
@@ -47,7 +42,7 @@ target_include_directories(harp_core PUBLIC inc)
 
 target_link_libraries(usb_desc tinyusb_device pico_unique_id pico_stdlib)
 target_link_libraries(harp_sync pico_stdlib)
-target_link_libraries(harp_core core_registers pico_stdlib tinyusb_device usb_desc)
+target_link_libraries(harp_core pico_stdlib tinyusb_device usb_desc)
 target_link_libraries(harp_c_app harp_core)
 
 if(DEBUG)
