@@ -5,7 +5,7 @@
 #include <reg_types.h>
 
 /**
- * \brief Harp C-style App that handles core behaviors in addition t
+ * \brief Harp C-style App that handles core behaviors in addition to
 *   reads/writes to app-specific registers.
 *   Implemented as a singleton to simplify attaching interrupt callbacks
 *   (and since you can only have one per device).
@@ -17,11 +17,8 @@ class HarpCApp: public HarpCore
 private:
 /**
  * \brief constructor
- * \param app_reg_values pointer to struct containing registers.
  * \param app_reg_specs array of reg specs, indexed by app register address.
  * \param app_register_count number of app registers
- * \param reg_fns array of RegFnPairs {read fn ptr, write fn ptr}, indexed by
- *  register address.
  * \param app_reg_count number of app registers.
  * \param update_fn pointer to function that will be called periodically to
  *  update the app state.
@@ -30,7 +27,6 @@ private:
     HarpCApp(uint16_t who_am_i,
              uint8_t hw_version_major, uint8_t hw_version_minor,
              uint8_t assembly_version,
-             uint8_t harp_version_major, uint8_t harp_version_minor,
              uint8_t fw_version_major, uint8_t fw_version_minor,
              uint16_t serial_number, const char name[],
              const uint8_t tag[],
@@ -50,7 +46,6 @@ public:
     static HarpCApp& init(uint16_t who_am_i,
                           uint8_t hw_version_major, uint8_t hw_version_minor,
                           uint8_t assembly_version,
-                          uint8_t harp_version_major, uint8_t harp_version_minor,
                           uint8_t fw_version_major, uint8_t fw_version_minor,
                           uint16_t serial_number, const char name[],
                           const uint8_t tag[],
