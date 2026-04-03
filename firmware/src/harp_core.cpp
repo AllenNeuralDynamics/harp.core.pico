@@ -3,7 +3,6 @@
 HarpCore& HarpCore::init(uint16_t who_am_i,
                          uint8_t hw_version_major, uint8_t hw_version_minor,
                          uint8_t assembly_version,
-                         uint8_t harp_version_major, uint8_t harp_version_minor,
                          uint8_t fw_version_major, uint8_t fw_version_minor,
                          uint16_t serial_number, const char name[],
                          const uint8_t tag[])
@@ -11,7 +10,6 @@ HarpCore& HarpCore::init(uint16_t who_am_i,
     // Create the singleton instance using the private constructor.
     static HarpCore core(who_am_i, hw_version_major, hw_version_minor,
                          assembly_version,
-                         harp_version_major, harp_version_minor,
                          fw_version_major, fw_version_minor, serial_number,
                          name, tag);
     return core;
@@ -20,12 +18,11 @@ HarpCore& HarpCore::init(uint16_t who_am_i,
 HarpCore::HarpCore(uint16_t who_am_i,
                    uint8_t hw_version_major, uint8_t hw_version_minor,
                    uint8_t assembly_version,
-                   uint8_t harp_version_major, uint8_t harp_version_minor,
                    uint8_t fw_version_major, uint8_t fw_version_minor,
                    uint16_t serial_number, const char name[],
                    const uint8_t tag[])
 :regs_{who_am_i, hw_version_major, hw_version_minor, assembly_version,
-       harp_version_major, harp_version_minor,
+       HARP_VERSION_MAJOR, HARP_VERSION_MINOR,
        fw_version_major, fw_version_minor, serial_number, name, tag},
  rx_buffer_index_{0}, total_bytes_read_{rx_buffer_index_}, new_msg_{false},
  set_visual_indicators_fn_{nullptr}, sync_{nullptr}, offset_us_64_{0},
