@@ -5,7 +5,7 @@
 #include <reg_types.h>
 
 /**
- * \brief Harp C-style App that handles core behaviors in addition t
+ * \brief Harp C-style App that handles core behaviors in addition to
 *   reads/writes to app-specific registers.
 *   Implemented as a singleton to simplify attaching interrupt callbacks
 *   (and since you can only have one per device).
