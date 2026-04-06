@@ -64,7 +64,6 @@ protected: // protected, but not private, to enable derived class usage.
     HarpCore(uint16_t who_am_i,
              uint8_t hw_version_major, uint8_t hw_version_minor,
              uint8_t assembly_version,
-             uint8_t harp_version_major, uint8_t harp_version_minor,
              uint8_t fw_version_major, uint8_t fw_version_minor,
              uint16_t serial_number, const char name[],
              const uint8_t tag[]);
@@ -87,7 +86,6 @@ public:
     static HarpCore& init(uint16_t who_am_i,
                           uint8_t hw_version_major, uint8_t hw_version_minor,
                           uint8_t assembly_version,
-                          uint8_t harp_version_major, uint8_t harp_version_minor,
                           uint8_t fw_version_major, uint8_t fw_version_minor,
                           uint16_t serial_number, const char name[],
                           const uint8_t tag[]);
