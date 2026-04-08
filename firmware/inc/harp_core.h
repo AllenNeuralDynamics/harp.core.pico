@@ -148,15 +148,19 @@ public:
  *  indicate a read error.
  * \note This function is provided for convenience where no payload is
  *  necessary. For alternate circumstances where a specific payload must be
- *  used, invoke send_harp_reply() instead.
+ *  included, invoke send_harp_reply() directly instead.
  */
-    static void read_from_write_only_reg_error(uint8_t reg_name);
+    static void read_reg_error(uint8_t reg_name);
 
 /**
- * \brief write-error handler function. Send a harp reply indicating a write
- *  error to the specified register.
+ * \brief write-error handler function. Send a zero-length payload harp reply
+ *  from the specified register with the reply type set as `WRITE_ERROR` to
+ *  indicate a write error.
+ * \note This function is provided for convenience where no payload is
+ *  necessary. For alternate circumstances where a specific payload must be
+ *  included, invoke send_harp_reply() directly instead.
  */
-    static void write_to_read_only_reg_error(msg_t& msg);
+    static void write_reg_error(msg_t& msg);
 
 
 /**
@@ -610,21 +614,21 @@ private:
     //  so we can't index into them directly via enum value.
     const RegSpec core_reg_specs_[CORE_REG_COUNT] =
     {RegSpec::U16((void*)&regs_.R_WHO_AM_I,
-                  read_reg_generic, write_to_read_only_reg_error),
+                  read_reg_generic, write_reg_error),
      RegSpec::U8((void*)&regs_.R_HW_VERSION_H,
-                 read_reg_generic, write_to_read_only_reg_error),
+                 read_reg_generic, write_reg_error),
      RegSpec::U8((void*)&regs_.R_HW_VERSION_L,
-                 read_reg_generic, write_to_read_only_reg_error),
+                 read_reg_generic, write_reg_error),
      RegSpec::U8((void*)&regs_.R_ASSEMBLY_VERSION,
-                 read_reg_generic, write_to_read_only_reg_error),
+                 read_reg_generic, write_reg_error),
      RegSpec::U8((void*)&regs_.R_HARP_VERSION_H,
-                 read_reg_generic, write_to_read_only_reg_error),
+                 read_reg_generic, write_reg_error),
      RegSpec::U8((void*)&regs_.R_HARP_VERSION_L,
-                 read_reg_generic, write_to_read_only_reg_error),
+                 read_reg_generic, write_reg_error),
      RegSpec::U8((void*)&regs_.R_FW_VERSION_H,
-                 read_reg_generic, write_to_read_only_reg_error),
+                 read_reg_generic, write_reg_error),
      RegSpec::U8((void*)&regs_.R_FW_VERSION_L,
-                 read_reg_generic, write_to_read_only_reg_error),
+                 read_reg_generic, write_reg_error),
      RegSpec::U32(&regs_.R_TIMESTAMP_SECOND,
                   read_timestamp_second, write_timestamp_second),
      RegSpec::U16(&regs_.R_TIMESTAMP_MICRO,
@@ -642,9 +646,9 @@ private:
      RegSpec::U8(&regs_.R_TIMESTAMP_OFFSET,
                  read_reg_generic, write_reg_generic),
      RegSpec::U8Array(&regs_.R_UUID, sizeof(regs_.R_UUID),
-                      read_uuid, write_to_read_only_reg_error),
+                      read_uuid, write_reg_error),
      RegSpec::U8Array(&regs_.R_TAG, sizeof(regs_.R_TAG),
-                      read_reg_generic, write_to_read_only_reg_error),
+                      read_reg_generic, write_reg_error),
     };
 };
 
