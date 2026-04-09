@@ -311,21 +311,23 @@ void HarpCore::write_reg_generic(msg_t& msg)
                     spec.payload_type);
 }
 
-void HarpCore::write_to_read_only_reg_error(msg_t& msg)
+void HarpCore::write_reg_error(msg_t& msg)
 {
 #ifdef DEBUG_HARP_MSG_IN
     printf("Error: Reg address %d is read-only.\r\n", msg.header.address);
 #endif
-    send_harp_reply(WRITE_ERROR, msg.header.address);
+    const RegSpec& spec = self->reg_address_to_spec(msg.header.address);
+    send_harp_reply(WRITE_ERROR, msg.header.address, nullptr, 0, spec.payload_type);
 }
 
-void HarpCore::read_from_write_only_reg_error(uint8_t address)
+void HarpCore::read_reg_error(uint8_t address)
 {
 #ifdef DEBUG_HARP_MSG_IN
     printf("Error: Reg address %d is write-only.\r\n", address);
 #endif
     // Send a zero-length reply to keep the transaction short.
-    send_harp_reply(READ_ERROR, address, nullptr, 0, U8);
+    const RegSpec& spec = self->reg_address_to_spec(address);
+    send_harp_reply(READ_ERROR, address, nullptr, 0, spec.payload_type);
 }
 
 inline void HarpCore::set_timestamp_regs(uint64_t harp_time_us)

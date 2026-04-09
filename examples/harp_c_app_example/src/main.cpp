@@ -13,14 +13,9 @@ const uint16_t who_am_i = 1234;
 const uint8_t hw_version_major = 1;
 const uint8_t hw_version_minor = 0;
 const uint8_t assembly_version = 2;
-const uint8_t harp_version_major = 2;
-const uint8_t harp_version_minor = 0;
 const uint8_t fw_version_major = 3;
 const uint8_t fw_version_minor = 0;
 const uint16_t serial_number = 0xCAFE;
-
-// Harp App Register Setup.
-const size_t app_reg_count = 2;
 
 // Define register contents.
 struct RegData
@@ -30,13 +25,16 @@ struct RegData
 } reg_data;
 
 // Define register "specs."
-RegSpec app_reg_specs[app_reg_count]
+RegSpec app_reg_specs[]
 {
     RegSpec::U8(&reg_data.test_byte,
         HarpCore::read_reg_generic, HarpCore::write_reg_generic),
     RegSpec::U32(&reg_data.test_uint,
-        HarpCore::read_reg_generic, HarpCore::write_to_read_only_reg_error)
+        HarpCore::read_reg_generic, HarpCore::write_reg_error) // read-only reg
 };
+
+const size_t app_reg_count = sizeof(app_reg_specs);
+
 
 void app_reset()
 {
@@ -55,12 +53,10 @@ void update_app_state()
 // Create Harp App.
 HarpCApp& app = HarpCApp::init(who_am_i, hw_version_major, hw_version_minor,
                                assembly_version,
-                               harp_version_major, harp_version_minor,
                                fw_version_major, fw_version_minor,
                                serial_number, "Example C App",
                                (const uint8_t*)GIT_HASH, // in CMakeLists.txt.
-                               app_reg_specs,
-                               app_reg_count, update_app_state,
+                               app_reg_specs, app_reg_count, update_app_state,
                                app_reset);
 
 // Core0 main.
@@ -71,7 +67,7 @@ int main()
     app.set_synchronizer(&sync);
 #ifdef DEBUG
     stdio_uart_init_full(uart0, 921600, 0, -1); // use uart1 tx only.
-    printf("Hello, from an RP2040!\r\n");
+    printf("Hello, from a Pi Pico!\r\n");
 #endif
     while(true)
     {
