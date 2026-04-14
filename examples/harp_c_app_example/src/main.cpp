@@ -33,7 +33,7 @@ RegSpec app_reg_specs[]
         HarpCore::read_reg_generic, HarpCore::write_reg_error) // read-only reg
 };
 
-const size_t app_reg_count = sizeof(app_reg_specs);
+const size_t app_reg_count = sizeof(app_reg_specs)/sizeof(RegSpec);
 
 
 void app_reset()
