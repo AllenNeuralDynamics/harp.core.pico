@@ -1,8 +1,8 @@
 #ifndef REG_SPEC_H
 #define REG_SPEC_H
-#include <stdint.h>
-#include <reg_types.h>
-#include <harp_message.h>
+#include <cstdint>
+#include "reg_types.h"
+#include "harp_message.h"
 
 using read_reg_fn = void (*)(uint8_t);
 using write_reg_fn = void (*)(msg_t& msg);
@@ -53,9 +53,9 @@ struct RegSpec
     {return RegSpec(base_ptr, sizeof(uint16_t), reg_type_t::U16,
                     read_fn_ptr, write_fn_ptr);}
 
-    static RegSpec U16Array(volatile void* const base_ptr, uint8_t num_bytes,
+    static RegSpec U16Array(volatile void* const base_ptr, uint8_t num_elements,
                       read_reg_fn read_fn_ptr, write_reg_fn write_fn_ptr)
-    {return RegSpec(base_ptr, num_bytes, reg_type_t::U16,
+    {return RegSpec(base_ptr, num_elements * sizeof(uint16_t), reg_type_t::U16,
                     read_fn_ptr, write_fn_ptr);}
 
     static RegSpec S16(volatile void* const base_ptr,
@@ -63,9 +63,9 @@ struct RegSpec
     {return RegSpec(base_ptr, sizeof(uint16_t), reg_type_t::S16,
                     read_fn_ptr, write_fn_ptr);}
 
-    static RegSpec S16Array(volatile void* const base_ptr, uint8_t num_bytes,
+    static RegSpec S16Array(volatile void* const base_ptr, uint8_t num_elements,
                       read_reg_fn read_fn_ptr, write_reg_fn write_fn_ptr)
-    {return RegSpec(base_ptr, num_bytes, reg_type_t::S16,
+    {return RegSpec(base_ptr, num_elements * sizeof(int16_t), reg_type_t::S16,
                     read_fn_ptr, write_fn_ptr);}
 
     static RegSpec U32(volatile void* const base_ptr,
@@ -73,9 +73,9 @@ struct RegSpec
     {return RegSpec(base_ptr, sizeof(uint32_t), reg_type_t::U32,
                     read_fn_ptr, write_fn_ptr);}
 
-    static RegSpec U32Array(volatile void* const base_ptr, uint8_t num_bytes,
+    static RegSpec U32Array(volatile void* const base_ptr, uint8_t num_elements,
                       read_reg_fn read_fn_ptr, write_reg_fn write_fn_ptr)
-    {return RegSpec(base_ptr, num_bytes, reg_type_t::U32,
+    {return RegSpec(base_ptr, num_elements * sizeof(uint32_t), reg_type_t::U32,
                     read_fn_ptr, write_fn_ptr);}
 
     static RegSpec S32(volatile void* const base_ptr,
@@ -83,9 +83,9 @@ struct RegSpec
     {return RegSpec(base_ptr, sizeof(uint32_t), reg_type_t::S32,
                     read_fn_ptr, write_fn_ptr);}
 
-    static RegSpec S32Array(volatile void* const base_ptr, uint8_t num_bytes,
+    static RegSpec S32Array(volatile void* const base_ptr, uint8_t num_elements,
                       read_reg_fn read_fn_ptr, write_reg_fn write_fn_ptr)
-    {return RegSpec(base_ptr, num_bytes, reg_type_t::S32,
+    {return RegSpec(base_ptr, num_elements * sizeof(int32_t), reg_type_t::S32,
                     read_fn_ptr, write_fn_ptr);}
 
     static RegSpec Float(volatile void* const base_ptr,
@@ -93,9 +93,9 @@ struct RegSpec
     {return RegSpec(base_ptr, sizeof(uint32_t), reg_type_t::Float,
                     read_fn_ptr, write_fn_ptr);}
 
-    static RegSpec FloatArray(volatile void* const base_ptr, uint8_t num_bytes,
+    static RegSpec FloatArray(volatile void* const base_ptr, uint8_t num_floats,
                       read_reg_fn read_fn_ptr, write_reg_fn write_fn_ptr)
-    {return RegSpec(base_ptr, num_bytes, reg_type_t::Float,
+    {return RegSpec(base_ptr, num_floats * sizeof(float), reg_type_t::Float,
                     read_fn_ptr, write_fn_ptr);}
 
 /**
