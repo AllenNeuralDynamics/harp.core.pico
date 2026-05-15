@@ -107,7 +107,9 @@ void HarpCApp::handle_buffered_ext_app_message()
             break;
         }
         case READ:
-            // Stub: extended reads not yet implemented.
+            // Rejected: READ requests MUST NOT set the ExtendedLength flag.
+            // Drain any trailing CRC bytes to keep the CDC stream aligned.
+            drain_ext_payload(msg);
             send_harp_reply(READ_ERROR, header.address, nullptr, 0,
                             header.payload_type);
             break;
