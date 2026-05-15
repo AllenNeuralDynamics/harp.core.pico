@@ -63,6 +63,16 @@ private:
     void handle_buffered_app_message();
 
 /**
+ * \brief Dispatch an incoming extended-length message to the appropriate app register's
+ *  extended write handler.
+ * \details Called from HarpCore::run() when new_ext_msg_ is set. Performs
+ *  address range-checking, looks up the write_ext_fn_ptr from the register's
+ *  RegSpec, and invokes it. Drains and discards payload bytes before sending
+ *  a WRITE_ERROR reply for out-of-range or non-extended-capable registers.
+ */
+    void handle_buffered_ext_app_message() override;
+
+/**
  * \brief update app state. Readable registers can be updated here.
  *  Implements virtual member fn in base class of the same name.
  */

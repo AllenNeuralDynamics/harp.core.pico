@@ -72,3 +72,47 @@ void HarpCApp::dump_app_registers()
          address < app_reg_count_ + APP_REG_START_ADDRESS; ++address)
         reg_address_to_spec(address).read_fn_ptr(address);
 }
+
+void HarpCApp::handle_buffered_ext_app_message()
+{
+    extended_msg_header_t& header = get_buffered_ext_msg_header();
+    extended_msg_t msg{header};
+    // Only app registers are extended-length-capable in this implementation.
+    if (header.address < APP_REG_START_ADDRESS ||
+        header.address >= (APP_REG_START_ADDRESS + app_reg_count_))
+    {
+        drain_ext_payload(msg);
+        send_harp_reply(WRITE_ERROR, header.address, nullptr, 0,
+                        header.payload_type);
+        clear_ext_msg();
+        return;
+    }
+    const uint8_t app_reg_index = header.address - APP_REG_START_ADDRESS;
+    switch (header.base_type())
+    {
+        case WRITE:
+        {
+            write_ext_reg_fn fn =
+                app_reg_specs_[app_reg_index].write_ext_fn_ptr;
+            if (fn == nullptr)
+            {
+                drain_ext_payload(msg);
+                send_harp_reply(WRITE_ERROR, header.address, nullptr, 0,
+                                header.payload_type);
+            }
+            else
+            {
+                fn(msg);
+            }
+            break;
+        }
+        case READ:
+            // Stub: extended reads not yet implemented.
+            send_harp_reply(READ_ERROR, header.address, nullptr, 0,
+                            header.payload_type);
+            break;
+        default:
+            break;
+    }
+    clear_ext_msg();
+}

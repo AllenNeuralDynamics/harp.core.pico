@@ -24,7 +24,8 @@ HarpCore::HarpCore(uint16_t who_am_i,
 :regs_{who_am_i, hw_version_major, hw_version_minor, assembly_version,
        HARP_VERSION_MAJOR, HARP_VERSION_MINOR,
        fw_version_major, fw_version_minor, serial_number, name, tag},
- rx_buffer_index_{0}, total_bytes_read_{rx_buffer_index_}, new_msg_{false},
+ rx_buffer_index_{0}, total_bytes_read_{rx_buffer_index_},
+ new_msg_{false}, new_ext_msg_{false},
  set_visual_indicators_fn_{nullptr}, sync_{nullptr}, offset_us_64_{0},
  disconnect_handled_{false}, connect_handled_{false}, sync_handled_{false},
  heartbeat_interval_us_{HEARTBEAT_STANDBY_INTERVAL_US}
@@ -45,6 +46,13 @@ void HarpCore::run()
     update_state();
     update_app_state(); // Does nothing unless a derived class implements it.
     process_cdc_input();
+    if (new_ext_msg_)
+    {
+        handle_buffered_ext_app_message();
+        if (new_ext_msg_) // Safety net: clear if the handler forgot to.
+            clear_ext_msg();
+        return;
+    }
     if (not new_msg_)
         return;
 #ifdef DEBUG_HARP_MSG_IN
@@ -82,36 +90,59 @@ void HarpCore::run()
 
 void HarpCore::process_cdc_input()
 {
-    // TODO: Consider a timeout if we never receive a fully formed message.
-    // TODO: scan for partial messages.
-    // Fetch all data in the serial port. If it's at least a header's worth,
-    // check the payload size and keep reading up to the end of the packet.
+    // Guard: preserve the extended-length header in rx_buffer_ while the handler is active.
+    if (new_ext_msg_)
+        return;
     if (not tud_cdc_available())
         return;
-    // If the header has arrived, only read up to the full payload so we can
-    // process one message at a time.
-    uint32_t max_bytes_to_read = sizeof(rx_buffer_) - rx_buffer_index_;
-    if (total_bytes_read_ >= sizeof(msg_header_t))
+    // Limit the first read to sizeof(extended_msg_header_t) bytes so we never
+    // accidentally pull payload bytes into rx_buffer_ before we know the type.
+    // For normal messages (5-byte header) this is strictly more than needed and
+    // works fine with subsequent calls to fill the payload.
+    uint32_t max_bytes_to_read;
+    if (rx_buffer_index_ == 0)
     {
-        // Reinterpret contents of the rx buffer as a message header.
-        msg_header_t& header = get_buffered_msg_header();
-        // Read only the remainder of a single harp message.
-        max_bytes_to_read = header.msg_size() - total_bytes_read_;
+        max_bytes_to_read = sizeof(extended_msg_header_t);
+    }
+    else if (is_extended_length(rx_buffer_[0]))
+    {
+        // Still accumulating the extended header; read only what remains.
+        max_bytes_to_read = sizeof(extended_msg_header_t) - rx_buffer_index_;
+    }
+    else
+    {
+        // Normal message: expand the read window once we know the full size.
+        max_bytes_to_read = sizeof(rx_buffer_) - rx_buffer_index_;
+        if (total_bytes_read_ >= sizeof(msg_header_t))
+        {
+            msg_header_t& header = get_buffered_msg_header();
+            max_bytes_to_read = header.msg_size() - total_bytes_read_;
+        }
     }
     uint32_t bytes_read = tud_cdc_read(&(rx_buffer_[rx_buffer_index_]),
                                        max_bytes_to_read);
     rx_buffer_index_ += bytes_read;
-    // See if we have a message header's worth of data yet. Baily early if not.
+    // Need at least 1 byte to inspect the type.
+    if (rx_buffer_index_ < 1)
+        return;
+    // Extended-length message path.
+    if (is_extended_length(rx_buffer_[0]))
+    {
+        if (rx_buffer_index_ >= sizeof(extended_msg_header_t))
+        {
+            rx_buffer_index_ = 0; // Reset index; header data stays in rx_buffer_.
+            new_ext_msg_ = true;
+        }
+        return; // Keep accumulating header bytes on the next call.
+    }
+    // Normal message path.
     if (total_bytes_read_ < sizeof(msg_header_t))
         return;
-    // Reinterpret contents of the rx buffer as a message header.
     msg_header_t& header = get_buffered_msg_header();
-    // Bail early if the full message (with payload) has not fully arrived.
     if (total_bytes_read_ < header.msg_size())
         return;
     rx_buffer_index_ = 0; // Reset buffer index for the next message.
     new_msg_ = true;
-    return;
 }
 
 msg_t HarpCore::get_buffered_msg()
@@ -480,4 +511,121 @@ void HarpCore::read_uuid(uint8_t reg_name)
 #pragma warning("Harp Core Register UUID not autodetected for this board.")
 #endif
     send_harp_reply(READ, reg_name);
+}
+
+size_t HarpCore::copy_ext_chunk(void* dest, size_t max_bytes)
+{
+    if (max_bytes == 0 || !tud_cdc_available())
+        return 0;
+    return tud_cdc_read(dest, max_bytes);
+}
+
+void HarpCore::drain_ext_payload(extended_msg_t& msg)
+{
+    // Drain payload bytes plus the 4-byte trailing CRC-32 so subsequent
+    // normal messages are not corrupted by leftover extended-length data.
+    uint8_t discard[64];
+    uint32_t remaining = msg.payload_length() + 4; // +4 for CRC-32
+    uint64_t last_progress_us = time_us_64();
+    while (remaining > 0)
+    {
+        tud_task();
+        const uint32_t to_read = (remaining < sizeof(discard))
+                                  ? remaining
+                                  : uint32_t(sizeof(discard));
+        const size_t drained = copy_ext_chunk(discard, to_read);
+        if (drained > 0)
+        {
+            remaining -= uint32_t(drained);
+            last_progress_us = time_us_64();
+        }
+        else if ((time_us_64() - last_progress_us) >= EXT_TIMEOUT_US)
+        {
+            break; // Give up.
+        }
+    }
+}
+
+uint32_t HarpCore::crc32_update(uint32_t crc, const void* data, size_t len)
+{
+    // CRC-32/ISO-HDLC: reflected polynomial 0xEDB88320 (normal form: 0x04C11DB7).
+    // Init: 0xFFFFFFFF.  Final XOR: 0xFFFFFFFF.  Check value: 0xCBF43926.
+    const uint8_t* p = static_cast<const uint8_t*>(data);
+    for (size_t i = 0; i < len; ++i)
+    {
+        crc ^= p[i];
+        for (int j = 0; j < 8; ++j)
+            crc = (crc >> 1) ^ (0xEDB88320u & -(crc & 1u));
+    }
+    return crc;
+}
+
+void HarpCore::write_ext_reg_generic(extended_msg_t& msg)
+{
+    const uint32_t payload_num_bytes = msg.payload_length();
+    const RegSpec& spec = reg_address_to_spec(msg.header.address);
+    uint8_t* dest = (uint8_t*)((void*)spec.base_ptr);
+    uint32_t bytes_received = 0;
+    // CRC-32 is computed over all bytes of the message up to (not including)
+    // the trailing CRC-32 field: header bytes + all payload bytes.
+    uint32_t crc = 0xFFFFFFFFu;
+    crc = crc32_update(crc, &msg.header, sizeof(extended_msg_header_t));
+    uint64_t last_progress_us = time_us_64();
+    while (bytes_received < payload_num_bytes)
+    {
+        tud_task();
+        const uint32_t bytes_remaining = payload_num_bytes - bytes_received;
+        const size_t chunk = copy_ext_chunk(dest + bytes_received,
+                                            bytes_remaining);
+        if (chunk > 0)
+        {
+            crc = crc32_update(crc, dest + bytes_received, chunk);
+            bytes_received += uint32_t(chunk);
+            last_progress_us = time_us_64();
+        }
+        else if ((time_us_64() - last_progress_us) >= EXT_TIMEOUT_US)
+        {
+            drain_ext_payload(msg); // re-sync the CDC stream.
+            send_harp_reply(WRITE_ERROR, msg.header.address, nullptr, 0,
+                            msg.header.payload_type);
+            return;
+        }
+    }
+    const uint32_t computed_crc = crc ^ 0xFFFFFFFFu;
+    // Read and verify the 4-byte trailing CRC-32.
+    uint8_t crc_buf[4];
+    size_t crc_bytes_received = 0;
+    uint64_t crc_wait_start = time_us_64();
+    while (crc_bytes_received < sizeof(crc_buf))
+    {
+        tud_task();
+        const size_t n = copy_ext_chunk(crc_buf + crc_bytes_received,
+                                        sizeof(crc_buf) - crc_bytes_received);
+        if (n > 0)
+        {
+            crc_bytes_received += n;
+            crc_wait_start = time_us_64();
+        }
+        else if ((time_us_64() - crc_wait_start) >= EXT_TIMEOUT_US)
+        {
+            send_harp_reply(WRITE_ERROR, msg.header.address, nullptr, 0,
+                            msg.header.payload_type);
+            return;
+        }
+    }
+    uint32_t received_crc;
+    memcpy(&received_crc, crc_buf, sizeof(received_crc));
+    if (computed_crc != received_crc)
+    {
+        send_harp_reply(WRITE_ERROR, msg.header.address, nullptr, 0,
+                        msg.header.payload_type);
+        return;
+    }
+    if (!is_muted())
+    {
+        // Reply payload is the CRC-32 of the request (receipt-CRC echo).
+        send_harp_reply(WRITE, msg.header.address,
+                        &computed_crc, sizeof(computed_crc),
+                        reg_type_t::U32);
+    }
 }

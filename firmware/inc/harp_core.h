@@ -35,6 +35,8 @@ inline constexpr size_t HARP_VERSION_PATCH = 0;
                                         // to IDLE.
 #define HEARTBEAT_ACTIVE_INTERVAL_US (1'000'000UL)
 #define HEARTBEAT_STANDBY_INTERVAL_US (3'000'000UL)
+#define EXT_TIMEOUT_US (2'000'000UL) // Max time to wait between extended-length payload
+                                      // chunks before issuing a WRITE_ERROR.
 
 /**
  * \brief enum for easier interpretation of the OP_MODE bitfield in the
@@ -109,6 +111,13 @@ public:
     {return *((msg_header_t*)(&rx_buffer_));}
 
 /**
+ * \brief return a reference to the extended-length message header in the #rx_buffer_.
+ * \warning this should only be accessed if new_ext_msg() is true.
+ */
+    extended_msg_header_t& get_buffered_ext_msg_header()
+    {return *((extended_msg_header_t*)(&rx_buffer_));}
+
+/**
  * \brief return a reference to the message in the #rx_buffer_. Inline.
  * \warning this should only be accessed if new_msg() is true.
  */
@@ -119,6 +128,13 @@ public:
  */
     bool new_msg()
     {return new_msg_;}
+
+/**
+ * \brief flag indicating whether or not a new extended-length message header is in the
+ *  #rx_buffer_.
+ */
+    bool new_ext_msg()
+    {return new_ext_msg_;}
 
 /**
  * \brief generic handler function to write a message payload to a core or
@@ -161,6 +177,34 @@ public:
  *  included, invoke send_harp_reply() directly instead.
  */
     static void write_reg_error(msg_t& msg);
+
+/**
+ * \brief Copy up to \p max_bytes of extended-length payload from the USB CDC receive
+ *  buffer into \p dest without blocking.
+ * \param dest destination buffer to copy into.
+ * \param max_bytes maximum number of bytes to copy.
+ * \return number of bytes actually copied (0 if no data available).
+ */
+    static size_t copy_ext_chunk(void* dest, size_t max_bytes);
+
+/**
+ * \brief Generic extended-length write handler for registers whose payload fits
+ *  entirely in RAM.
+ * \details Streams the extended-length payload from USB CDC directly into the
+ *  register's backing memory (spec.base_ptr) in chunks while accumulating a
+ *  CRC-32/ISO-HDLC over all header and payload bytes.  After the payload is
+ *  complete, reads the 4-byte trailing CRC-32, verifies it, and—on success—
+ *  issues a standard WRITE reply with a U32 payload containing the computed
+ *  CRC-32.  Sends a WRITE_ERROR reply if a chunk timeout (EXT_TIMEOUT_US)
+ *  occurs or the CRC does not match.
+ * \note This function blocks in a polling loop until all payload bytes and the
+ *  trailing CRC-32 have been received or a timeout fires.  tud_task() is
+ *  called each iteration.
+ * \warning The caller must ensure spec.base_ptr points to a buffer large
+ *  enough to hold the entire payload.
+ * \param msg reference to the parsed extended-length message header (still in rx_buffer_).
+ */
+    static void write_ext_reg_generic(extended_msg_t& msg);
 
 
 /**
@@ -404,6 +448,12 @@ protected:
     {new_msg_ = false;}
 
 /**
+ * \brief flag that new extended-length message has been handled. Inline.
+ */
+    void clear_ext_msg()
+    {new_ext_msg_ = false;}
+
+/**
  * \brief entry point for handling incoming harp messages to core registers.
  *      Dispatches message to the appropriate handler.
  */
@@ -415,6 +465,23 @@ protected:
  *  harp core.
  */
     virtual void handle_buffered_app_message(){};
+
+/**
+ * \brief Handle incoming extended-length messages for the derived class.
+ * \details Called from run() when new_ext_msg_ is set. The 8-byte extended
+ *  header is in rx_buffer_; payload bytes must be consumed via copy_ext_chunk().
+ *  Does nothing in the base class.
+ */
+    virtual void handle_buffered_ext_app_message(){};
+
+/**
+ * \brief Drain and discard all remaining payload bytes (plus the trailing
+ *  4-byte CRC-32) from the USB CDC buffer for the given extended-length message.
+ * \details Used in error paths to keep the CDC stream aligned for the next
+ *  message. Aborts early if a chunk timeout fires.
+ * \param msg reference to the extended-length message whose payload should be drained.
+ */
+    static void drain_ext_payload(extended_msg_t& msg);
 
 /**
  * \brief update state of the derived class. Does nothing in the base class,
@@ -454,6 +521,13 @@ protected:
     bool new_msg_;
 
 /**
+ * \brief flag indicating whether or not a new extended-length message header is in the
+ *  #rx_buffer_. Set by process_cdc_input() once all 8 header bytes have
+ *  arrived; cleared by clear_ext_msg() after the handler returns.
+ */
+    bool new_ext_msg_;
+
+/**
  * \brief function pointer to function that enables/disables visual indicators.
  */
     void (* set_visual_indicators_fn_)(bool);
@@ -464,6 +538,18 @@ protected:
     HarpSynchronizer* sync_;
 
 private:
+/**
+ * \brief Incrementally compute CRC-32/ISO-HDLC (IEEE 802.3) over a data buffer.
+ * \details Bitwise implementation; reflected polynomial 0xEDB88320.
+ *  Initialise \p crc to 0xFFFFFFFF before the first call, then XOR the final
+ *  return value with 0xFFFFFFFF to obtain the standard CRC-32 output.
+ * \param crc running CRC state (start with 0xFFFFFFFF).
+ * \param data pointer to input bytes.
+ * \param len  number of bytes.
+ * \return updated running CRC state.
+ */
+    static uint32_t crc32_update(uint32_t crc, const void* data, size_t len);
+
 /**
  * \brief recompute the next heartbeat event time based on the current time.
  */

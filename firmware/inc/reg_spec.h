@@ -6,6 +6,7 @@
 
 using read_reg_fn = void (*)(uint8_t);
 using write_reg_fn = void (*)(msg_t& msg);
+using write_ext_reg_fn = void (*)(extended_msg_t& msg); ///< Handler for extended-length WRITE messages.
 
 
 /**
@@ -18,11 +19,12 @@ struct RegSpec
     const reg_type_t payload_type;
     read_reg_fn read_fn_ptr;
     write_reg_fn write_fn_ptr;
+    write_ext_reg_fn write_ext_fn_ptr; ///< nullptr if register is not extended-length capable.
 
     // Default Constructor
     RegSpec()
     :base_ptr{nullptr}, num_bytes{0}, payload_type{reg_type_t::U8},
-     read_fn_ptr{nullptr}, write_fn_ptr{nullptr}{}
+     read_fn_ptr{nullptr}, write_fn_ptr{nullptr}, write_ext_fn_ptr{nullptr}}{}
 
     // Assignment Operator.
     RegSpec& operator=(const RegSpec& other) = default;
@@ -105,7 +107,8 @@ struct RegSpec
             reg_type_t payload_type,
             read_reg_fn read_fn_ptr, write_reg_fn write_fn_ptr)
         :base_ptr{base_ptr}, num_bytes{num_bytes}, payload_type{payload_type},
-         read_fn_ptr{read_fn_ptr}, write_fn_ptr{write_fn_ptr}{}
+         read_fn_ptr{read_fn_ptr}, write_fn_ptr{write_fn_ptr},
+         write_ext_fn_ptr{nullptr}{}}
 };
 
 #endif //REG_SPEC_H
