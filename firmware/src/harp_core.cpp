@@ -586,8 +586,10 @@ void HarpCore::write_ext_reg_generic(extended_msg_t& msg)
         else if ((time_us_64() - last_progress_us) >= EXT_TIMEOUT_US)
         {
             drain_ext_payload(msg); // re-sync the CDC stream.
-            send_harp_reply(WRITE_ERROR, msg.header.address, nullptr, 0,
-                            msg.header.payload_type);
+            // WRITE_ERROR for an extended-length write carries U32 0x00000000.
+            constexpr uint32_t err_payload = 0;
+            send_harp_reply(WRITE_ERROR, msg.header.address,
+                            &err_payload, sizeof(err_payload), reg_type_t::U32);
             return;
         }
     }
@@ -608,8 +610,10 @@ void HarpCore::write_ext_reg_generic(extended_msg_t& msg)
         }
         else if ((time_us_64() - crc_wait_start) >= EXT_TIMEOUT_US)
         {
-            send_harp_reply(WRITE_ERROR, msg.header.address, nullptr, 0,
-                            msg.header.payload_type);
+            // WRITE_ERROR for an extended-length write carries U32 0x00000000.
+            constexpr uint32_t err_payload = 0;
+            send_harp_reply(WRITE_ERROR, msg.header.address,
+                            &err_payload, sizeof(err_payload), reg_type_t::U32);
             return;
         }
     }
@@ -617,8 +621,10 @@ void HarpCore::write_ext_reg_generic(extended_msg_t& msg)
     memcpy(&received_crc, crc_buf, sizeof(received_crc));
     if (computed_crc != received_crc)
     {
-        send_harp_reply(WRITE_ERROR, msg.header.address, nullptr, 0,
-                        msg.header.payload_type);
+        // WRITE_ERROR for an extended-length write carries U32 0x00000000.
+        constexpr uint32_t err_payload = 0;
+        send_harp_reply(WRITE_ERROR, msg.header.address,
+                        &err_payload, sizeof(err_payload), reg_type_t::U32);
         return;
     }
     if (!is_muted())

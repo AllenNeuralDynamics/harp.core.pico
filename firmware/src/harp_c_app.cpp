@@ -70,7 +70,13 @@ void HarpCApp::dump_app_registers()
 {
     for (uint8_t address = APP_REG_START_ADDRESS;
          address < app_reg_count_ + APP_REG_START_ADDRESS; ++address)
-        reg_address_to_spec(address).read_fn_ptr(address);
+    {
+        const RegSpec& spec = reg_address_to_spec(address);
+        // Extended-length registers are excluded from DUMP by default.
+        if (spec.write_ext_fn_ptr != nullptr)
+            continue;
+        spec.read_fn_ptr(address);
+    }
 }
 
 void HarpCApp::handle_buffered_ext_app_message()
@@ -82,8 +88,10 @@ void HarpCApp::handle_buffered_ext_app_message()
         header.address >= (APP_REG_START_ADDRESS + app_reg_count_))
     {
         drain_ext_payload(msg);
-        send_harp_reply(WRITE_ERROR, header.address, nullptr, 0,
-                        header.payload_type);
+        // WRITE_ERROR for an extended-length write carries U32 0x00000000.
+        constexpr uint32_t err_payload = 0;
+        send_harp_reply(WRITE_ERROR, header.address,
+                        &err_payload, sizeof(err_payload), reg_type_t::U32);
         clear_ext_msg();
         return;
     }
@@ -97,8 +105,10 @@ void HarpCApp::handle_buffered_ext_app_message()
             if (fn == nullptr)
             {
                 drain_ext_payload(msg);
-                send_harp_reply(WRITE_ERROR, header.address, nullptr, 0,
-                                header.payload_type);
+                // WRITE_ERROR for an extended-length write carries U32 0x00000000.
+                constexpr uint32_t err_payload = 0;
+                send_harp_reply(WRITE_ERROR, header.address,
+                                &err_payload, sizeof(err_payload), reg_type_t::U32);
             }
             else
             {
