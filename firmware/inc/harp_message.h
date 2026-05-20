@@ -15,6 +15,7 @@ enum msg_type_t: uint8_t
     EVENT = 3,
     READ_ERROR  = READ  | ERROR_MASK,
     WRITE_ERROR = WRITE | ERROR_MASK,
+    BLOB = WRITE | EXTENDED_LENGTH, ///< Extended-length blob WRITE (payload_type = reg_type_t::blob).
 };
 
 /// \brief Returns true if the ExtendedLength flag (bit 4) is set in the given type byte.

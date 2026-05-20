@@ -65,9 +65,10 @@ private:
 /**
  * \brief Dispatch an incoming extended-length message to the appropriate app register's
  *  extended write handler.
- * \details Called from HarpCore::run() when new_ext_msg_ is set. Performs
- *  address range-checking, looks up the write_ext_fn_ptr from the register's
- *  RegSpec, and invokes it. Drains and discards payload bytes before sending
+ * \details Called from HarpCore::run() when new_msg() is true and
+ *  get_buffered_msg_type() == msg_type_t::BLOB. Performs
+ *  address range-checking, casts write_fn_ptr to write_ext_reg_fn for blob registers,
+ *  and invokes it. Drains and discards payload bytes before sending
  *  a WRITE_ERROR reply for out-of-range or non-extended-capable registers.
  */
     void handle_buffered_ext_app_message() override;

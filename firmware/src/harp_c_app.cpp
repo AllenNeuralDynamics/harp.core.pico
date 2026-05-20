@@ -56,7 +56,7 @@ void HarpCApp::handle_buffered_app_message()
             app_reg_specs_[app_reg_address].read_fn_ptr(msg.header.address);
             break;
         case WRITE:
-            app_reg_specs_[app_reg_address].write_fn_ptr(msg);
+            reinterpret_cast<write_reg_fn>(app_reg_specs_[app_reg_address].write_fn_ptr)(msg);
             break;
         default:
         {
@@ -100,8 +100,10 @@ void HarpCApp::handle_buffered_ext_app_message()
     {
         case WRITE:
         {
-            write_ext_reg_fn fn =
-                app_reg_specs_[app_reg_index].write_ext_fn_ptr;
+            const RegSpec& spec = app_reg_specs_[app_reg_index];
+            write_ext_reg_fn fn = (spec.payload_type == reg_type_t::Blob)
+                ? reinterpret_cast<write_ext_reg_fn>(spec.write_fn_ptr)
+                : nullptr;
             if (fn == nullptr)
             {
                 drain_ext_payload(msg);

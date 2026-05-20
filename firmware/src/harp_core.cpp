@@ -175,7 +175,7 @@ void HarpCore::handle_buffered_core_message()
             core_reg_specs_[msg.header.address].read_fn_ptr(msg.header.address);
             break;
         case WRITE:
-            core_reg_specs_[msg.header.address].write_fn_ptr(msg);
+            reinterpret_cast<write_reg_fn>(core_reg_specs_[msg.header.address].write_fn_ptr)(msg);
             break;
     }
     clear_msg();

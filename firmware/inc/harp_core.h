@@ -112,7 +112,8 @@ public:
 
 /**
  * \brief return a reference to the extended-length message header in the #rx_buffer_.
- * \warning this should only be accessed if new_ext_msg() is true.
+ * \warning this should only be accessed if new_msg() is true and
+ *  get_buffered_msg_type() == msg_type_t::BLOB.
  */
     extended_msg_header_t& get_buffered_ext_msg_header()
     {return *((extended_msg_header_t*)(&rx_buffer_));}
