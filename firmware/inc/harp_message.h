@@ -20,7 +20,7 @@ enum msg_type_t: uint8_t
 /// \brief Returns true if the ExtendedLength flag (bit 4) is set in the given type byte.
 /// \details When set, the Length field is 32-bit LE and the trailing Checksum is CRC-32/ISO-HDLC.
 inline bool is_extended_length(uint8_t type_byte)
-{ return bool(type_byte & 0x10u); }
+{ return bool(type_byte & static_cast<uint8_t>(EXTENDED_LENGTH)); }
 
 
 // Byte-align struct data so we can either:
