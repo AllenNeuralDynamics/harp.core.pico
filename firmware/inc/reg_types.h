@@ -26,7 +26,8 @@ enum class reg_type_t: uint8_t
     TimestampedS32 = HAS_TIMESTAMP | S32,
     TimestampedU64 = HAS_TIMESTAMP | U64,
     TimestampedS64 = HAS_TIMESTAMP | S64,
-    TimestampedFloat = HAS_TIMESTAMP | Float
+    TimestampedFloat = HAS_TIMESTAMP | Float,
+    Blob = 0x0D, ///< Binary large object; payload is a raw byte sequence.
 };
 
 #endif // REG_TYPES_H

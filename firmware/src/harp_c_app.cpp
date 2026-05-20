@@ -56,7 +56,7 @@ void HarpCApp::handle_buffered_app_message()
             app_reg_specs_[app_reg_address].read_fn_ptr(msg.header.address);
             break;
         case WRITE:
-            app_reg_specs_[app_reg_address].write_fn_ptr(msg);
+            reinterpret_cast<write_reg_fn>(app_reg_specs_[app_reg_address].write_fn_ptr)(msg);
             break;
         default:
         {
@@ -70,5 +70,63 @@ void HarpCApp::dump_app_registers()
 {
     for (uint8_t address = APP_REG_START_ADDRESS;
          address < app_reg_count_ + APP_REG_START_ADDRESS; ++address)
-        reg_address_to_spec(address).read_fn_ptr(address);
+    {
+        const RegSpec& spec = reg_address_to_spec(address);
+        // Extended-length (blob) registers are excluded from DUMP by default.
+        if (spec.payload_type == reg_type_t::Blob)
+            continue;
+        spec.read_fn_ptr(address);
+    }
+}
+
+void HarpCApp::handle_buffered_ext_app_message()
+{
+    extended_msg_header_t& header = get_buffered_ext_msg_header();
+    extended_msg_t msg{header};
+    // Only app registers are extended-length-capable in this implementation.
+    if (header.address < APP_REG_START_ADDRESS ||
+        header.address >= (APP_REG_START_ADDRESS + app_reg_count_))
+    {
+        drain_ext_payload(msg);
+        // WRITE_ERROR for an extended-length write carries U32 0x00000000.
+        constexpr uint32_t err_payload = 0;
+        send_harp_reply(WRITE_ERROR, header.address,
+                        &err_payload, sizeof(err_payload), reg_type_t::U32);
+        clear_msg();
+        return;
+    }
+    const uint8_t app_reg_index = header.address - APP_REG_START_ADDRESS;
+    switch (header.base_type())
+    {
+        case WRITE:
+        {
+            const RegSpec& spec = app_reg_specs_[app_reg_index];
+            write_ext_reg_fn fn = (spec.payload_type == reg_type_t::Blob)
+                ? reinterpret_cast<write_ext_reg_fn>(spec.write_fn_ptr)
+                : nullptr;
+            if (fn == nullptr)
+            {
+                drain_ext_payload(msg);
+                // WRITE_ERROR for an extended-length write carries U32 0x00000000.
+                constexpr uint32_t err_payload = 0;
+                send_harp_reply(WRITE_ERROR, header.address,
+                                &err_payload, sizeof(err_payload), reg_type_t::U32);
+            }
+            else
+            {
+                fn(msg);
+            }
+            break;
+        }
+        case READ:
+            // Rejected: READ requests MUST NOT set the ExtendedLength flag.
+            // Drain any trailing CRC bytes to keep the CDC stream aligned.
+            drain_ext_payload(msg);
+            send_harp_reply(READ_ERROR, header.address, nullptr, 0,
+                            header.payload_type);
+            break;
+        default:
+            break;
+    }
+    clear_msg();
 }

@@ -24,7 +24,9 @@ HarpCore::HarpCore(uint16_t who_am_i,
 :regs_{who_am_i, hw_version_major, hw_version_minor, assembly_version,
        HARP_VERSION_MAJOR, HARP_VERSION_MINOR,
        fw_version_major, fw_version_minor, serial_number, name, tag},
- rx_buffer_index_{0}, total_bytes_read_{rx_buffer_index_}, new_msg_{false},
+ rx_buffer_index_{0}, total_bytes_read_{rx_buffer_index_},
+ new_msg_{false},
+ ext_crc32_state_{0}, ext_last_chunk_us_{0},
  set_visual_indicators_fn_{nullptr}, sync_{nullptr}, offset_us_64_{0},
  disconnect_handled_{false}, connect_handled_{false}, sync_handled_{false},
  heartbeat_interval_us_{HEARTBEAT_STANDBY_INTERVAL_US}
@@ -48,33 +50,39 @@ void HarpCore::run()
     if (not new_msg_)
         return;
 #ifdef DEBUG_HARP_MSG_IN
-    msg_t msg = get_buffered_msg();
-    printf("Msg data: \r\n");
-    printf("  type: %d\r\n", msg.header.type);
-    printf("  addr: %d\r\n", msg.header.address);
-    printf("  raw len: %d\r\n", msg.header.raw_length);
-    printf("  port: %d\r\n", msg.header.port);
-    printf("  payload type: %d\r\n", msg.header.payload_type);
-    printf("  payload len: %d\r\n", msg.header.payload_length());
-    uint8_t payload_len = msg.header.payload_length();
-    if (payload_len > 0)
+    if (get_buffered_msg_type() != msg_type_t::BLOB)
     {
-        printf("  payload: ");
-        for (auto i = 0; i < msg.payload_length(); ++i)
-            printf("%d, ", ((uint8_t*)(msg.payload))[i]);
+        msg_t msg = get_buffered_msg();
+        printf("Msg data: \r\n");
+        printf("  type: %d\r\n", msg.header.type);
+        printf("  addr: %d\r\n", msg.header.address);
+        printf("  raw len: %d\r\n", msg.header.raw_length);
+        printf("  port: %d\r\n", msg.header.port);
+        printf("  payload type: %d\r\n", msg.header.payload_type);
+        printf("  payload len: %d\r\n", msg.header.payload_length());
+        uint8_t payload_len = msg.header.payload_length();
+        if (payload_len > 0)
+        {
+            printf("  payload: ");
+            for (auto i = 0; i < msg.payload_length(); ++i)
+                printf("%d, ", ((uint8_t*)(msg.payload))[i]);
+        }
+        printf("\r\n\r\n");
     }
-    printf("\r\n\r\n");
 #endif
     // Handle in-range register msgs and clear them. Ignore out-of-range msgs.
     handle_buffered_core_message(); // Handle msg. Clear it if handled.
     if (not new_msg_)
         return;
-    handle_buffered_app_message(); // Handle msg. Clear it if handled.
+    if (get_buffered_msg_type() == msg_type_t::BLOB)
+        handle_buffered_ext_app_message(); // Handle msg. Clear it if handled.
+    else
+        handle_buffered_app_message(); // Handle msg. Clear it if handled.
     // Always clear any unhandled messages, so we don't lock up.
     if (new_msg_)
     {
 #ifdef DEBUG_HARP_MSG_IN
-    printf("Ignoring out-of-range msg!\r\n");
+        printf("Ignoring out-of-range msg!\r\n");
 #endif
         clear_msg();
     }
@@ -82,36 +90,64 @@ void HarpCore::run()
 
 void HarpCore::process_cdc_input()
 {
-    // TODO: Consider a timeout if we never receive a fully formed message.
-    // TODO: scan for partial messages.
-    // Fetch all data in the serial port. If it's at least a header's worth,
-    // check the payload size and keep reading up to the end of the packet.
+    // Guard: don't overwrite a buffered message that hasn't been handled yet.
+    if (new_msg_)
+        return;
     if (not tud_cdc_available())
         return;
-    // If the header has arrived, only read up to the full payload so we can
-    // process one message at a time.
-    uint32_t max_bytes_to_read = sizeof(rx_buffer_) - rx_buffer_index_;
-    if (total_bytes_read_ >= sizeof(msg_header_t))
+    // Limit the first read to sizeof(extended_msg_header_t) bytes so we never
+    // accidentally pull payload bytes into rx_buffer_ before we know the type.
+    // For normal messages (5-byte header) this is strictly more than needed and
+    // works fine with subsequent calls to fill the payload.
+    uint32_t max_bytes_to_read;
+    if (rx_buffer_index_ == 0)
     {
-        // Reinterpret contents of the rx buffer as a message header.
-        msg_header_t& header = get_buffered_msg_header();
-        // Read only the remainder of a single harp message.
-        max_bytes_to_read = header.msg_size() - total_bytes_read_;
+        max_bytes_to_read = sizeof(extended_msg_header_t);
+    }
+    else if (is_extended_length(rx_buffer_[0]))
+    {
+        // Still accumulating the extended header; read only what remains.
+        max_bytes_to_read = sizeof(extended_msg_header_t) - rx_buffer_index_;
+    }
+    else
+    {
+        // Normal message: expand the read window once we know the full size.
+        max_bytes_to_read = sizeof(rx_buffer_) - rx_buffer_index_;
+        if (total_bytes_read_ >= sizeof(msg_header_t))
+        {
+            msg_header_t& header = get_buffered_msg_header();
+            max_bytes_to_read = header.msg_size() - total_bytes_read_;
+        }
     }
     uint32_t bytes_read = tud_cdc_read(&(rx_buffer_[rx_buffer_index_]),
                                        max_bytes_to_read);
     rx_buffer_index_ += bytes_read;
-    // See if we have a message header's worth of data yet. Baily early if not.
+    // Need at least 1 byte to inspect the type.
+    if (rx_buffer_index_ < 1)
+        return;
+    // Extended-length message path.
+    if (is_extended_length(rx_buffer_[0]))
+    {
+        if (rx_buffer_index_ >= sizeof(extended_msg_header_t))
+        {
+            rx_buffer_index_ = 0; // Reset index; header data stays in rx_buffer_.
+            // Seed CRC-32 over the 8-byte extended header so copy_ext_chunk()
+            // can accumulate payload bytes into the same running state.
+            ext_crc32_state_ = crc32_update(0xFFFFFFFFu, rx_buffer_,
+                                            sizeof(extended_msg_header_t));
+            ext_last_chunk_us_ = time_us_64();
+            new_msg_ = true;
+        }
+        return; // Keep accumulating header bytes on the next call.
+    }
+    // Normal message path.
     if (total_bytes_read_ < sizeof(msg_header_t))
         return;
-    // Reinterpret contents of the rx buffer as a message header.
     msg_header_t& header = get_buffered_msg_header();
-    // Bail early if the full message (with payload) has not fully arrived.
     if (total_bytes_read_ < header.msg_size())
         return;
     rx_buffer_index_ = 0; // Reset buffer index for the next message.
     new_msg_ = true;
-    return;
 }
 
 msg_t HarpCore::get_buffered_msg()
@@ -139,7 +175,7 @@ void HarpCore::handle_buffered_core_message()
             core_reg_specs_[msg.header.address].read_fn_ptr(msg.header.address);
             break;
         case WRITE:
-            core_reg_specs_[msg.header.address].write_fn_ptr(msg);
+            reinterpret_cast<write_reg_fn>(core_reg_specs_[msg.header.address].write_fn_ptr)(msg);
             break;
     }
     clear_msg();
@@ -307,8 +343,8 @@ void HarpCore::write_reg_generic(msg_t& msg)
         return;
     const uint8_t& reg_name = msg.header.address;
     const RegSpec& spec = self->reg_address_to_spec(msg.header.address);
-    send_harp_reply(WRITE, reg_name, spec.base_ptr, spec.num_bytes,
-                    spec.payload_type);
+    send_harp_reply(WRITE, reg_name, spec.base_ptr,
+                    static_cast<uint8_t>(spec.num_bytes), spec.payload_type);
 }
 
 void HarpCore::write_reg_error(msg_t& msg)
@@ -480,4 +516,126 @@ void HarpCore::read_uuid(uint8_t reg_name)
 #pragma warning("Harp Core Register UUID not autodetected for this board.")
 #endif
     send_harp_reply(READ, reg_name);
+}
+
+bool HarpCore::copy_ext_chunk(void* dest, size_t max_bytes, size_t* bytes_written)
+{
+    tud_task();
+    if ((time_us_64() - self->ext_last_chunk_us_) >= EXT_TIMEOUT_US)
+    {
+        *bytes_written = 0;
+        return false; // Timeout.
+    }
+    *bytes_written = tud_cdc_read(dest, max_bytes);
+    if (*bytes_written > 0)
+    {
+        self->ext_crc32_state_ = crc32_update(self->ext_crc32_state_,
+                                               dest, *bytes_written);
+        self->ext_last_chunk_us_ = time_us_64();
+    }
+    return true;
+}
+
+void HarpCore::drain_ext_payload(extended_msg_t& msg)
+{
+    // Drain payload bytes plus the 4-byte trailing CRC-32 so subsequent
+    // normal messages are not corrupted by leftover extended-length data.
+    uint8_t discard[64];
+    uint32_t remaining = msg.payload_length() + 4; // +4 for CRC-32
+    uint64_t last_progress_us = time_us_64();
+    while (remaining > 0)
+    {
+        tud_task();
+        const uint32_t to_read = (remaining < sizeof(discard))
+                                  ? remaining
+                                  : uint32_t(sizeof(discard));
+        const size_t drained = tud_cdc_read(discard, to_read);
+        if (drained > 0)
+        {
+            remaining -= uint32_t(drained);
+            last_progress_us = time_us_64();
+        }
+        else if ((time_us_64() - last_progress_us) >= EXT_TIMEOUT_US)
+        {
+            break; // Give up.
+        }
+    }
+}
+
+uint32_t HarpCore::crc32_update(uint32_t crc, const void* data, size_t len)
+{
+    // CRC-32/ISO-HDLC: reflected polynomial 0xEDB88320 (normal form: 0x04C11DB7).
+    // Init: 0xFFFFFFFF.  Final XOR: 0xFFFFFFFF.  Check value: 0xCBF43926.
+    const uint8_t* p = static_cast<const uint8_t*>(data);
+    for (size_t i = 0; i < len; ++i)
+    {
+        crc ^= p[i];
+        for (int j = 0; j < 8; ++j)
+            crc = (crc >> 1) ^ (0xEDB88320u & -(crc & 1u));
+    }
+    return crc;
+}
+
+void HarpCore::write_ext_reg_generic(extended_msg_t& msg)
+{
+    const uint32_t payload_num_bytes = msg.payload_length();
+    const RegSpec& spec = reg_address_to_spec(msg.header.address);
+    uint8_t* dest = static_cast<uint8_t*>(
+        const_cast<void*>(reinterpret_cast<const void*>(spec.base_ptr)));
+    uint32_t bytes_received = 0;
+    // Stream payload into register backing memory.
+    // copy_ext_chunk() handles tud_task(), CRC-32 accumulation, and timeout.
+    while (bytes_received < payload_num_bytes)
+    {
+        size_t chunk;
+        if (!copy_ext_chunk(dest + bytes_received,
+                            payload_num_bytes - bytes_received, &chunk))
+        {
+            drain_ext_payload(msg); // Re-sync the CDC stream.
+            constexpr uint32_t err_payload = 0;
+            send_harp_reply(WRITE_ERROR, msg.header.address,
+                            &err_payload, sizeof(err_payload), reg_type_t::U32);
+            return;
+        }
+        bytes_received += uint32_t(chunk);
+    }
+    // All payload bytes received. Finalize CRC (header + payload only;
+    // the trailing CRC-32 field is excluded from the checksum calculation).
+    const uint32_t computed_crc = self->ext_crc32_state_ ^ 0xFFFFFFFFu;
+    // Read the 4-byte trailing CRC-32 directly (without updating CRC state).
+    uint8_t crc_buf[4];
+    uint32_t crc_bytes_received = 0;
+    while (crc_bytes_received < sizeof(crc_buf))
+    {
+        tud_task();
+        if ((time_us_64() - self->ext_last_chunk_us_) >= EXT_TIMEOUT_US)
+        {
+            constexpr uint32_t err_payload = 0;
+            send_harp_reply(WRITE_ERROR, msg.header.address,
+                            &err_payload, sizeof(err_payload), reg_type_t::U32);
+            return;
+        }
+        const size_t n = tud_cdc_read(crc_buf + crc_bytes_received,
+                                      sizeof(crc_buf) - crc_bytes_received);
+        if (n > 0)
+        {
+            crc_bytes_received += uint32_t(n);
+            self->ext_last_chunk_us_ = time_us_64();
+        }
+    }
+    uint32_t received_crc;
+    memcpy(&received_crc, crc_buf, sizeof(received_crc));
+    if (computed_crc != received_crc)
+    {
+        constexpr uint32_t err_payload = 0;
+        send_harp_reply(WRITE_ERROR, msg.header.address,
+                        &err_payload, sizeof(err_payload), reg_type_t::U32);
+        return;
+    }
+    if (!is_muted())
+    {
+        // Reply payload is the CRC-32 of the request (receipt-CRC echo).
+        send_harp_reply(WRITE, msg.header.address,
+                        &computed_crc, sizeof(computed_crc), reg_type_t::U32);
+    }
 }
