@@ -172,13 +172,15 @@ public:
     static void write_reg_error(msg_t& msg);
 
 /**
- * \brief Copy up to \p max_bytes of extended-length payload from the USB CDC receive
- *  buffer into \p dest without blocking.
+ * \brief Copy up to \p max_bytes of extended-length payload from the USB CDC
+ *  receive buffer into \p dest.  Calls tud_task() and accumulates the running
+ *  CRC-32/ISO-HDLC state.
  * \param dest destination buffer to copy into.
  * \param max_bytes maximum number of bytes to copy.
- * \return number of bytes actually copied (0 if no data available).
+ * \param bytes_written set to the number of bytes actually copied (may be 0).
+ * \return true on success (including 0 bytes available); false on timeout.
  */
-    static size_t copy_ext_chunk(void* dest, size_t max_bytes);
+    static bool copy_ext_chunk(void* dest, size_t max_bytes, size_t* bytes_written);
 
 /**
  * \brief Generic extended-length write handler for registers whose payload fits
@@ -562,6 +564,19 @@ private:
  *  This is implemented as a read-only reference to the #rx_buffer_index_.
  */
     const uint8_t& total_bytes_read_;
+
+/**
+ * \brief Running CRC-32/ISO-HDLC state for the current extended-length message.
+ *  Seeded over the 8-byte header in process_cdc_input() and updated by
+ *  copy_ext_chunk() for each payload chunk.
+ */
+    uint32_t ext_crc32_state_;
+
+/**
+ * \brief Timestamp (in system microseconds) of the last successful chunk read
+ *  in an extended-length transfer.  Used by copy_ext_chunk() for timeout detection.
+ */
+    uint64_t ext_last_chunk_us_;
 
 /**
  * \brief buffer to contain data read from the serial port.

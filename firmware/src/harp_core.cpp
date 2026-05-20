@@ -26,6 +26,7 @@ HarpCore::HarpCore(uint16_t who_am_i,
        fw_version_major, fw_version_minor, serial_number, name, tag},
  rx_buffer_index_{0}, total_bytes_read_{rx_buffer_index_},
  new_msg_{false},
+ ext_crc32_state_{0}, ext_last_chunk_us_{0},
  set_visual_indicators_fn_{nullptr}, sync_{nullptr}, offset_us_64_{0},
  disconnect_handled_{false}, connect_handled_{false}, sync_handled_{false},
  heartbeat_interval_us_{HEARTBEAT_STANDBY_INTERVAL_US}
@@ -130,6 +131,11 @@ void HarpCore::process_cdc_input()
         if (rx_buffer_index_ >= sizeof(extended_msg_header_t))
         {
             rx_buffer_index_ = 0; // Reset index; header data stays in rx_buffer_.
+            // Seed CRC-32 over the 8-byte extended header so copy_ext_chunk()
+            // can accumulate payload bytes into the same running state.
+            ext_crc32_state_ = crc32_update(0xFFFFFFFFu, rx_buffer_,
+                                            sizeof(extended_msg_header_t));
+            ext_last_chunk_us_ = time_us_64();
             new_msg_ = true;
         }
         return; // Keep accumulating header bytes on the next call.
@@ -512,11 +518,22 @@ void HarpCore::read_uuid(uint8_t reg_name)
     send_harp_reply(READ, reg_name);
 }
 
-size_t HarpCore::copy_ext_chunk(void* dest, size_t max_bytes)
+bool HarpCore::copy_ext_chunk(void* dest, size_t max_bytes, size_t* bytes_written)
 {
-    if (max_bytes == 0 || !tud_cdc_available())
-        return 0;
-    return tud_cdc_read(dest, max_bytes);
+    tud_task();
+    if ((time_us_64() - self->ext_last_chunk_us_) >= EXT_TIMEOUT_US)
+    {
+        *bytes_written = 0;
+        return false; // Timeout.
+    }
+    *bytes_written = tud_cdc_read(dest, max_bytes);
+    if (*bytes_written > 0)
+    {
+        self->ext_crc32_state_ = crc32_update(self->ext_crc32_state_,
+                                               dest, *bytes_written);
+        self->ext_last_chunk_us_ = time_us_64();
+    }
+    return true;
 }
 
 void HarpCore::drain_ext_payload(extended_msg_t& msg)
@@ -532,7 +549,7 @@ void HarpCore::drain_ext_payload(extended_msg_t& msg)
         const uint32_t to_read = (remaining < sizeof(discard))
                                   ? remaining
                                   : uint32_t(sizeof(discard));
-        const size_t drained = copy_ext_chunk(discard, to_read);
+        const size_t drained = tud_cdc_read(discard, to_read);
         if (drained > 0)
         {
             remaining -= uint32_t(drained);
