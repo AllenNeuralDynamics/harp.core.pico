@@ -343,8 +343,8 @@ void HarpCore::write_reg_generic(msg_t& msg)
         return;
     const uint8_t& reg_name = msg.header.address;
     const RegSpec& spec = self->reg_address_to_spec(msg.header.address);
-    send_harp_reply(WRITE, reg_name, spec.base_ptr, spec.num_bytes,
-                    spec.payload_type);
+    send_harp_reply(WRITE, reg_name, spec.base_ptr,
+                    static_cast<uint8_t>(spec.num_bytes), spec.payload_type);
 }
 
 void HarpCore::write_reg_error(msg_t& msg)
@@ -580,64 +580,53 @@ void HarpCore::write_ext_reg_generic(extended_msg_t& msg)
 {
     const uint32_t payload_num_bytes = msg.payload_length();
     const RegSpec& spec = reg_address_to_spec(msg.header.address);
-    uint8_t* dest = (uint8_t*)((void*)spec.base_ptr);
+    uint8_t* dest = static_cast<uint8_t*>(
+        const_cast<void*>(reinterpret_cast<const void*>(spec.base_ptr)));
     uint32_t bytes_received = 0;
-    // CRC-32 is computed over all bytes of the message up to (not including)
-    // the trailing CRC-32 field: header bytes + all payload bytes.
-    uint32_t crc = 0xFFFFFFFFu;
-    crc = crc32_update(crc, &msg.header, sizeof(extended_msg_header_t));
-    uint64_t last_progress_us = time_us_64();
+    // Stream payload into register backing memory.
+    // copy_ext_chunk() handles tud_task(), CRC-32 accumulation, and timeout.
     while (bytes_received < payload_num_bytes)
     {
-        tud_task();
-        const uint32_t bytes_remaining = payload_num_bytes - bytes_received;
-        const size_t chunk = copy_ext_chunk(dest + bytes_received,
-                                            bytes_remaining);
-        if (chunk > 0)
+        size_t chunk;
+        if (!copy_ext_chunk(dest + bytes_received,
+                            payload_num_bytes - bytes_received, &chunk))
         {
-            crc = crc32_update(crc, dest + bytes_received, chunk);
-            bytes_received += uint32_t(chunk);
-            last_progress_us = time_us_64();
-        }
-        else if ((time_us_64() - last_progress_us) >= EXT_TIMEOUT_US)
-        {
-            drain_ext_payload(msg); // re-sync the CDC stream.
-            // WRITE_ERROR for an extended-length write carries U32 0x00000000.
+            drain_ext_payload(msg); // Re-sync the CDC stream.
             constexpr uint32_t err_payload = 0;
             send_harp_reply(WRITE_ERROR, msg.header.address,
                             &err_payload, sizeof(err_payload), reg_type_t::U32);
             return;
         }
+        bytes_received += uint32_t(chunk);
     }
-    const uint32_t computed_crc = crc ^ 0xFFFFFFFFu;
-    // Read and verify the 4-byte trailing CRC-32.
+    // All payload bytes received. Finalize CRC (header + payload only;
+    // the trailing CRC-32 field is excluded from the checksum calculation).
+    const uint32_t computed_crc = self->ext_crc32_state_ ^ 0xFFFFFFFFu;
+    // Read the 4-byte trailing CRC-32 directly (without updating CRC state).
     uint8_t crc_buf[4];
-    size_t crc_bytes_received = 0;
-    uint64_t crc_wait_start = time_us_64();
+    uint32_t crc_bytes_received = 0;
     while (crc_bytes_received < sizeof(crc_buf))
     {
         tud_task();
-        const size_t n = copy_ext_chunk(crc_buf + crc_bytes_received,
-                                        sizeof(crc_buf) - crc_bytes_received);
-        if (n > 0)
+        if ((time_us_64() - self->ext_last_chunk_us_) >= EXT_TIMEOUT_US)
         {
-            crc_bytes_received += n;
-            crc_wait_start = time_us_64();
-        }
-        else if ((time_us_64() - crc_wait_start) >= EXT_TIMEOUT_US)
-        {
-            // WRITE_ERROR for an extended-length write carries U32 0x00000000.
             constexpr uint32_t err_payload = 0;
             send_harp_reply(WRITE_ERROR, msg.header.address,
                             &err_payload, sizeof(err_payload), reg_type_t::U32);
             return;
+        }
+        const size_t n = tud_cdc_read(crc_buf + crc_bytes_received,
+                                      sizeof(crc_buf) - crc_bytes_received);
+        if (n > 0)
+        {
+            crc_bytes_received += uint32_t(n);
+            self->ext_last_chunk_us_ = time_us_64();
         }
     }
     uint32_t received_crc;
     memcpy(&received_crc, crc_buf, sizeof(received_crc));
     if (computed_crc != received_crc)
     {
-        // WRITE_ERROR for an extended-length write carries U32 0x00000000.
         constexpr uint32_t err_payload = 0;
         send_harp_reply(WRITE_ERROR, msg.header.address,
                         &err_payload, sizeof(err_payload), reg_type_t::U32);
@@ -647,7 +636,6 @@ void HarpCore::write_ext_reg_generic(extended_msg_t& msg)
     {
         // Reply payload is the CRC-32 of the request (receipt-CRC echo).
         send_harp_reply(WRITE, msg.header.address,
-                        &computed_crc, sizeof(computed_crc),
-                        reg_type_t::U32);
+                        &computed_crc, sizeof(computed_crc), reg_type_t::U32);
     }
 }

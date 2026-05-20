@@ -264,8 +264,8 @@ public:
     static inline void send_harp_reply(msg_type_t reply_type, uint8_t reg_name)
     {
         const RegSpec& spec = reg_address_to_spec(reg_name);
-        send_harp_reply(reply_type, reg_name, spec.base_ptr, spec.num_bytes,
-                        spec.payload_type);
+        send_harp_reply(reply_type, reg_name, spec.base_ptr,
+                        static_cast<uint8_t>(spec.num_bytes), spec.payload_type);
     }
 
 /**
@@ -282,7 +282,8 @@ public:
                                        uint64_t harp_time_us)
     {
         const RegSpec& spec = reg_address_to_spec(reg_name);
-        send_harp_reply(reply_type, reg_name, spec.base_ptr, spec.num_bytes,
+        send_harp_reply(reply_type, reg_name, spec.base_ptr,
+                        static_cast<uint8_t>(spec.num_bytes),
                         spec.payload_type, harp_time_us);
     }
 
