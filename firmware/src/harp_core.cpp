@@ -49,33 +49,39 @@ void HarpCore::run()
     if (not new_msg_)
         return;
 #ifdef DEBUG_HARP_MSG_IN
-    msg_t msg = get_buffered_msg();
-    printf("Msg data: \r\n");
-    printf("  type: %d\r\n", msg.header.type);
-    printf("  addr: %d\r\n", msg.header.address);
-    printf("  raw len: %d\r\n", msg.header.raw_length);
-    printf("  port: %d\r\n", msg.header.port);
-    printf("  payload type: %d\r\n", msg.header.payload_type);
-    printf("  payload len: %d\r\n", msg.header.payload_length());
-    uint8_t payload_len = msg.header.payload_length();
-    if (payload_len > 0)
+    if (get_buffered_msg_type() != msg_type_t::BLOB)
     {
-        printf("  payload: ");
-        for (auto i = 0; i < msg.payload_length(); ++i)
-            printf("%d, ", ((uint8_t*)(msg.payload))[i]);
+        msg_t msg = get_buffered_msg();
+        printf("Msg data: \r\n");
+        printf("  type: %d\r\n", msg.header.type);
+        printf("  addr: %d\r\n", msg.header.address);
+        printf("  raw len: %d\r\n", msg.header.raw_length);
+        printf("  port: %d\r\n", msg.header.port);
+        printf("  payload type: %d\r\n", msg.header.payload_type);
+        printf("  payload len: %d\r\n", msg.header.payload_length());
+        uint8_t payload_len = msg.header.payload_length();
+        if (payload_len > 0)
+        {
+            printf("  payload: ");
+            for (auto i = 0; i < msg.payload_length(); ++i)
+                printf("%d, ", ((uint8_t*)(msg.payload))[i]);
+        }
+        printf("\r\n\r\n");
     }
-    printf("\r\n\r\n");
 #endif
     // Handle in-range register msgs and clear them. Ignore out-of-range msgs.
     handle_buffered_core_message(); // Handle msg. Clear it if handled.
     if (not new_msg_)
         return;
-    handle_buffered_app_message(); // Handle msg. Clear it if handled.
+    if (get_buffered_msg_type() == msg_type_t::BLOB)
+        handle_buffered_ext_app_message(); // Handle msg. Clear it if handled.
+    else
+        handle_buffered_app_message(); // Handle msg. Clear it if handled.
     // Always clear any unhandled messages, so we don't lock up.
     if (new_msg_)
     {
 #ifdef DEBUG_HARP_MSG_IN
-    printf("Ignoring out-of-range msg!\r\n");
+        printf("Ignoring out-of-range msg!\r\n");
 #endif
         clear_msg();
     }
@@ -83,8 +89,8 @@ void HarpCore::run()
 
 void HarpCore::process_cdc_input()
 {
-    // Guard: preserve the extended-length header in rx_buffer_ while the handler is active.
-    if (new_ext_msg_)
+    // Guard: don't overwrite a buffered message that hasn't been handled yet.
+    if (new_msg_)
         return;
     if (not tud_cdc_available())
         return;

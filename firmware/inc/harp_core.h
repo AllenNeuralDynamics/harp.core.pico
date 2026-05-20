@@ -455,7 +455,8 @@ protected:
 
 /**
  * \brief Handle incoming extended-length messages for the derived class.
- * \details Called from run() when new_ext_msg_ is set. The 8-byte extended
+ * \details Called from run() when new_msg() is true and
+ *  get_buffered_msg_type() == msg_type_t::BLOB. The 8-byte extended
  *  header is in rx_buffer_; payload bytes must be consumed via copy_ext_chunk().
  *  Does nothing in the base class.
  */
@@ -529,6 +530,13 @@ private:
  * \return updated running CRC state.
  */
     static uint32_t crc32_update(uint32_t crc, const void* data, size_t len);
+
+/**
+ * \brief Returns the message type byte of the currently buffered message.
+ * \warning only valid if new_msg() is true.
+ */
+    inline msg_type_t get_buffered_msg_type() const
+    { return msg_type_t(rx_buffer_[0]); }
 
 /**
  * \brief recompute the next heartbeat event time based on the current time.
