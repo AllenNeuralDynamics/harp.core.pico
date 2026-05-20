@@ -99,6 +99,11 @@ struct RegSpec
     {return RegSpec(base_ptr, num_floats * sizeof(float), reg_type_t::Float,
                     read_fn_ptr, reinterpret_cast<void(*)()>(write_fn_ptr));}
 
+    static RegSpec Blob(volatile void* const base_ptr, uint32_t num_bytes,
+                        read_reg_fn read_fn_ptr, write_ext_reg_fn write_fn_ptr)
+    {return RegSpec(base_ptr, num_bytes, reg_type_t::Blob,
+                    read_fn_ptr, reinterpret_cast<void(*)()>(write_fn_ptr));}
+
 /**
  * \brief constructor.
  */
