@@ -72,8 +72,8 @@ void HarpCApp::dump_app_registers()
          address < app_reg_count_ + APP_REG_START_ADDRESS; ++address)
     {
         const RegSpec& spec = reg_address_to_spec(address);
-        // Extended-length registers are excluded from DUMP by default.
-        if (spec.write_ext_fn_ptr != nullptr)
+        // Extended-length (blob) registers are excluded from DUMP by default.
+        if (spec.payload_type == reg_type_t::Blob)
             continue;
         spec.read_fn_ptr(address);
     }
