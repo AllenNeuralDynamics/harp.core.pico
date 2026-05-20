@@ -130,13 +130,6 @@ public:
     {return new_msg_;}
 
 /**
- * \brief flag indicating whether or not a new extended-length message header is in the
- *  #rx_buffer_.
- */
-    bool new_ext_msg()
-    {return new_ext_msg_;}
-
-/**
  * \brief generic handler function to write a message payload to a core or
  *      app register and issue a harp reply (unless is_muted()).
  * \note this function may be used in cases where no actions must trigger from
@@ -448,12 +441,6 @@ protected:
     {new_msg_ = false;}
 
 /**
- * \brief flag that new extended-length message has been handled. Inline.
- */
-    void clear_ext_msg()
-    {new_ext_msg_ = false;}
-
-/**
  * \brief entry point for handling incoming harp messages to core registers.
  *      Dispatches message to the appropriate handler.
  */
@@ -519,13 +506,6 @@ protected:
  * \brief flag indicating whether or not a new message is in the #rx_buffer_.
  */
     bool new_msg_;
-
-/**
- * \brief flag indicating whether or not a new extended-length message header is in the
- *  #rx_buffer_. Set by process_cdc_input() once all 8 header bytes have
- *  arrived; cleared by clear_ext_msg() after the handler returns.
- */
-    bool new_ext_msg_;
 
 /**
  * \brief function pointer to function that enables/disables visual indicators.

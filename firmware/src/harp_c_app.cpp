@@ -92,7 +92,7 @@ void HarpCApp::handle_buffered_ext_app_message()
         constexpr uint32_t err_payload = 0;
         send_harp_reply(WRITE_ERROR, header.address,
                         &err_payload, sizeof(err_payload), reg_type_t::U32);
-        clear_ext_msg();
+        clear_msg();
         return;
     }
     const uint8_t app_reg_index = header.address - APP_REG_START_ADDRESS;
@@ -126,5 +126,5 @@ void HarpCApp::handle_buffered_ext_app_message()
         default:
             break;
     }
-    clear_ext_msg();
+    clear_msg();
 }

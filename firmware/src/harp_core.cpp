@@ -25,7 +25,7 @@ HarpCore::HarpCore(uint16_t who_am_i,
        HARP_VERSION_MAJOR, HARP_VERSION_MINOR,
        fw_version_major, fw_version_minor, serial_number, name, tag},
  rx_buffer_index_{0}, total_bytes_read_{rx_buffer_index_},
- new_msg_{false}, new_ext_msg_{false},
+ new_msg_{false},
  set_visual_indicators_fn_{nullptr}, sync_{nullptr}, offset_us_64_{0},
  disconnect_handled_{false}, connect_handled_{false}, sync_handled_{false},
  heartbeat_interval_us_{HEARTBEAT_STANDBY_INTERVAL_US}
@@ -46,13 +46,6 @@ void HarpCore::run()
     update_state();
     update_app_state(); // Does nothing unless a derived class implements it.
     process_cdc_input();
-    if (new_ext_msg_)
-    {
-        handle_buffered_ext_app_message();
-        if (new_ext_msg_) // Safety net: clear if the handler forgot to.
-            clear_ext_msg();
-        return;
-    }
     if (not new_msg_)
         return;
 #ifdef DEBUG_HARP_MSG_IN
@@ -131,7 +124,7 @@ void HarpCore::process_cdc_input()
         if (rx_buffer_index_ >= sizeof(extended_msg_header_t))
         {
             rx_buffer_index_ = 0; // Reset index; header data stays in rx_buffer_.
-            new_ext_msg_ = true;
+            new_msg_ = true;
         }
         return; // Keep accumulating header bytes on the next call.
     }
