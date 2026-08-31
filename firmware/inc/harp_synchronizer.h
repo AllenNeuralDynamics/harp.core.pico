@@ -11,17 +11,16 @@
 #include <cstdio> // for printf
 #endif
 
-#define HARP_SYNC_BAUDRATE (100'000UL)
-#define HARP_SYNC_DATA_BITS (8)
-#define HARP_SYNC_STOP_BITS (1)
+inline constexpr uint32_t HARP_SYNC_BAUDRATE = 100'000;
+inline constexpr size_t HARP_SYNC_DATA_BITS = 8;
+inline constexpr size_t HARP_SYNC_STOP_BITS = 1;
 #define HARP_SYNC_PARITY (UART_PARITY_NONE)
 
-#define HARP_SYNC_OFFSET_US (672 - 90) // time (in [us]) from the **end** of
-                                       // the last packet byte and the time
-                                       // specified in that packet.
+// time (in [us]) from the **end** of the last packet byte and the time
+// specified in that packet.
+inline constexpr int32_t HARP_SYNC_OFFSET_US = (672 - 90);
 
-// Synchronizer that updates RP2040's timekeeping registers according to
-//  specific uart input. Singleton.
+/// Synchronizer that updates Harp time per specific uart input. Singleton.
 class HarpSynchronizer
 {
 public:

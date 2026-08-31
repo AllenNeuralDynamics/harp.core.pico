@@ -14,7 +14,7 @@ add_definitions(-DUSBD_PRODUCT="Example Device")
 include(${PICO_SDK_PATH}/pico_sdk_init.cmake)
 
 # Use modern conventions like std::invoke
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 23)
 
 project(harp_c_app_example)
 

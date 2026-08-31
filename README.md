@@ -1,17 +1,17 @@
 # Harp Pico Core
 
-An RP2040 Harp Core that implements the [Harp Protocol](https://harp-tech.org/protocol/BinaryProtocol-8bit.html) to serve as the basis of a custom Harp device.
+An RP2040 and RP2350 (ARM) Harp Core that implements the [Harp Protocol](https://harp-tech.org/protocol/BinaryProtocol-8bit.html) to serve as the basis of a custom Harp device.
 
 ## Features
-* Synchronization to an external Harp Clock Synchronizer signal.
-* Parsing incoming harp messages
-* Dispatching messages to the appropriate register
-* Sending harp-compliant timestamped replies
+* Synchronization to an external Harp Clock Synchronizer signal
+* Parsing incoming [Harp Protocol](https://harp-tech.org/protocol/BinaryProtocol-8bit.html) request messages
+* Dispatching request messages to the appropriate register
+* Sending Harp-compliant timestamped reply messages
 
 ## Examples
 See the [examples](./examples) folder to get a feel for incorporating the harp core into your own project.
 
-Additionally, here are a few examples that use the RP2040 Harp Core as a submodule in the wild:
+Additionally, here are a few examples from real world devices using the Pico Harp Core as a submodule:
 * [harp.device.environment-sensor](https://github.com/AllenNeuralDynamics/harp.device.environment_sensor)
 * [harp.device.valve-controller](https://github.com/AllenNeuralDynamics/harp.device.valve-controller)
 * [harp.device.white-rabbit](https://github.com/AllenNeuralDynamics/harp.device.white-rabbit)
@@ -19,13 +19,15 @@ Additionally, here are a few examples that use the RP2040 Harp Core as a submodu
 * [harp.device.sniff-detector](https://github.com/AllenNeuralDynamics/harp.device.sniff-detector)
 * [harp.device.treadmill](https://github.com/AllenNeuralDynamics/harp.device.treadmill)
 * [harp.device.cuttlefish](https://github.com/AllenNeuralDynamics/harp.device.cuttlefish)
+* [harp.device.quac](https://github.com/AllenNeuralDynamics/harp.device.quad-dac)
+* [harp.device.hobgoblin](https://github.com/harp-tech/device.hobgoblin)
 * [harp.pico.cam-trigger](https://github.com/AllenNeuralDynamics/harp.pico.cam-trigger)
 * [harp.pico.ephys-sync](https://github.com/AllenNeuralDynamics/harp.pico.ephys-sync)
 
 ---
 # Using this Library
 The easiest way to use this library is to include it as submodule in your project.
-To see how to structure your project to incorporate the RP2040 Harp Core as a library, see the examples above--or read on.
+To see how to structure your project to incorporate the Pico Harp Core as a library, see the examples above--or read on.
 
 ## Install the Pico SDK
 Download (or clone) the [Pico SDK](https://github.com/raspberrypi/pico-sdk) to a known folder on your PC.
@@ -41,13 +43,21 @@ git submodule add git@github.com:harp-tech/core.pico.git
 ````
 
 ## Setup your Project's CMakeLists.txt
-At the top of your project's CMakeLists.txt, you will need to include and initialize the Pico SDK. You can do so with:
+
+At the top of your project's CMakeLists.txt, if you are using the RP2350, you must add the following lines
+```cmake
+set(PICO_BOARD pico2)
+set(PICO_PLATFORM rp2350-arm-s)
+```
+If you are using the RP2040, omit the lines above to take the default option.
+
+Following the optional lines above you will need to include and initialize the Pico SDK. You can do so with:
 ````cmake
 include(${PICO_SDK_PATH}/pico_sdk_init.cmake)
 pico_sdk_init()
 ````
 
-You must also point to the folder of the **core.pico**'s CMakeLists.txt with
+You must also point to the folder of the **core.pico**'s (i.e this library's) CMakeLists.txt with
 ````cmake
 add_subdirectory(/path/to/cmakelist_dir build) # Path to core.pico's CMakeLists.txt
 ````
