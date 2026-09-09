@@ -2,30 +2,22 @@
 #include "harp_message.h"
 #include <harp_core.h>
 
-HarpCore& HarpCore::init(uint16_t who_am_i,
-                         uint8_t hw_version_major, uint8_t hw_version_minor,
-                         uint8_t assembly_version,
-                         uint8_t fw_version_major, uint8_t fw_version_minor,
-                         uint16_t serial_number, const char name[],
-                         const uint8_t tag[])
+HarpCore& HarpCore::init(uint16_t who_am_i, semver_t firmware, semver_t hardware,
+                         const char name[],
+                         const uint8_t tag[],
+                         const uint8_t interface_hash[])
 {
     // Create the singleton instance using the private constructor.
-    static HarpCore core(who_am_i, hw_version_major, hw_version_minor,
-                         assembly_version,
-                         fw_version_major, fw_version_minor, serial_number,
-                         name, tag);
-    return core;
+    static HarpCore c(who_am_i, firmware, hardware, name, tag, interface_hash);
+    return c;
 }
 
-HarpCore::HarpCore(uint16_t who_am_i,
-                   uint8_t hw_version_major, uint8_t hw_version_minor,
-                   uint8_t assembly_version,
-                   uint8_t fw_version_major, uint8_t fw_version_minor,
-                   uint16_t serial_number, const char name[],
-                   const uint8_t tag[])
-:regs_{who_am_i, hw_version_major, hw_version_minor, assembly_version,
-       HARP_VERSION_MAJOR, HARP_VERSION_MINOR,
-       fw_version_major, fw_version_minor, serial_number, name, tag},
+HarpCore::HarpCore(uint16_t who_am_i, semver_t firmware, semver_t hardware,
+                   const char name[],
+                   const uint8_t tag[],
+                   const uint8_t interface_hash[])
+:regs_{who_am_i, HARP_PROTOCOL, firmware, hardware, name, tag, RPI_CORE_ID,
+       interface_hash},
  rx_buffer_index_{0}, total_bytes_read_{rx_buffer_index_}, new_msg_{false},
  set_visual_indicators_fn_{nullptr}, sync_{nullptr}, offset_us_64_{0},
  disconnect_handled_{false}, connect_handled_{false}, sync_handled_{false},
@@ -225,6 +217,7 @@ void HarpCore::update_state(bool force, op_mode_t forced_next_state)
         {
             //if (self->regs_.r_operation_ctrl_bits.VISUALEN)
             //    set_led(!get_led);
+            // FIXME: ALIVE_EN and TIMESTAMP_SECOND
             if ((state == ACTIVE) & !is_muted()) // i.e: events enabled
                 send_harp_reply(EVENT, TIMESTAMP_SECOND);
         }
@@ -487,4 +480,12 @@ void HarpCore::read_uuid(uint8_t reg_name)
 #pragma warning("Harp Core Register UUID not autodetected for this board.")
 #endif
     send_harp_reply(READ, reg_name);
+}
+
+void HarpCore::read_heartbeat(uint8_t reg_name)
+{
+    if (HarpCore::is_muted())
+        return;
+    const uint8_t& state = self->regs_.r_operation_ctrl_bits.OP_MODE;
+    self->regs_.R_HEARTBEAT = ((state == ACTIVE? 1: 0) << 1) | (is_synced()? 1: 0);
 }

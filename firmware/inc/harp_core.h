@@ -18,16 +18,12 @@
 #include <pico/bootrom.h>
 
 // Project version
-inline constexpr size_t PICO_CORE_VERSION_MAJOR = 1;
-inline constexpr size_t PICO_CORE_VERSION_MINOR = 0;
-inline constexpr size_t PICO_CORE_VERSION_PATCH = 0;
+inline constexpr semver_t PICO_CORE_VERSION = {1, 0, 0};
 
 // Version of the Harp Protocol that this library most closely implements.
-inline constexpr size_t HARP_VERSION_MAJOR = 0;
-inline constexpr size_t HARP_VERSION_MINOR = 0;
-inline constexpr size_t HARP_VERSION_PATCH = 0;
+inline constexpr semver_t HARP_PROTOCOL = {1, 0, 0};
 
-
+inline constexpr uint8_t RPI_CORE_ID[] = {'r', 'p', 'i'};
 
 #define NO_PC_INTERVAL_US (3'000'000UL) // Threshold duration. If the connection
                                         // with the PC has been inactive for
@@ -61,12 +57,10 @@ using enum reg_type_t;
 
 // Make constructor protected to prevent creating instances outside of init().
 protected: // protected, but not private, to enable derived class usage.
-    HarpCore(uint16_t who_am_i,
-             uint8_t hw_version_major, uint8_t hw_version_minor,
-             uint8_t assembly_version,
-             uint8_t fw_version_major, uint8_t fw_version_minor,
-             uint16_t serial_number, const char name[],
-             const uint8_t tag[]);
+    HarpCore(uint16_t who_am_i, semver_t firmware, semver_t hardware,
+             const char name[],
+             const uint8_t tag[],
+             const uint8_t interface_hash[]);
 
     ~HarpCore();
 
@@ -83,12 +77,10 @@ public:
  * \note default constructor, copy constructor, and assignment operator have
  *  been disabled.
  */
-    static HarpCore& init(uint16_t who_am_i,
-                          uint8_t hw_version_major, uint8_t hw_version_minor,
-                          uint8_t assembly_version,
-                          uint8_t fw_version_major, uint8_t fw_version_minor,
-                          uint16_t serial_number, const char name[],
-                          const uint8_t tag[]);
+    static HarpCore& init(uint16_t who_am_i, semver_t firmware, semver_t hardware,
+                          const char name[],
+                          const uint8_t tag[],
+                          const uint8_t interface_hash[]);
 
     static inline HarpCore* self = nullptr; // pointer to the singleton instance.
     static HarpCore& instance() {return *self;} ///< returns the singleton.
@@ -589,6 +581,13 @@ private:
     static void read_uuid(uint8_t reg_name);
 
 
+/**
+ * \brief read the [Heartbeat][https://github.com/harp-tech/protocol/blob/main/Device.md#r_heartbeat-u16--device-status-information]
+ * register.
+ */
+    static void read_heartbeat(uint8_t reg_name);
+
+
     // write handler function per core register. Handles write
     // operations to that register.
     // Note: these all need to have the same function signature.
@@ -648,6 +647,10 @@ private:
      RegSpec::U8Array(&regs_.R_UUID, sizeof(regs_.R_UUID),
                       read_uuid, write_reg_error),
      RegSpec::U8Array(&regs_.R_TAG, sizeof(regs_.R_TAG),
+                      read_reg_generic, write_reg_error),
+     RegSpec::U16(&regs_.R_HEARTBEAT,
+                  read_heartbeat, write_reg_error),
+     RegSpec::U8Array(&regs_.R_VERSION, sizeof(regs_.R_VERSION),
                       read_reg_generic, write_reg_error),
     };
 };

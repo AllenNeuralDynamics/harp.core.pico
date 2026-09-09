@@ -1,10 +1,11 @@
 #ifndef CORE_REGISTERS_H
 #define CORE_REGISTERS_H
-#include <stdint.h>
+#include <cstdint>
 #include <reg_types.h>
 #include <reg_spec.h>
 #include <core_reg_bits.h>
 #include <cstring>  // for strcpy
+#include <array> // for size
 
 
 // R_OPERATION_CTRL bitfields.
@@ -44,10 +45,37 @@ enum CoreRegName : uint8_t
     TIMESTAMP_OFFSET = 15,
     UUID = 16,
     TAG = 17,
+    HEARTBEAT = 18,
+    VERSION = 19
 };
 
-/// Number of core registers.
-inline constexpr size_t CORE_REG_COUNT = CoreRegName::TAG - CoreRegName::WHO_AM_I + 1;
+inline constexpr size_t CORE_REG_COUNT = CoreRegName::VERSION - CoreRegName::WHO_AM_I + 1;
+
+#pragma pack(push, 1)
+/**
+ * \brief Packed struct containing major.minor.patch semantic version information.
+ */
+struct semver_t
+{
+    uint8_t major;
+    uint8_t minor;
+    uint8_t patch;
+};
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+/**
+ * \brief Harp Version Core Register packed convenienced struct
+ */
+struct harp_version_reg_t
+{
+    semver_t protocol;
+    semver_t firmware;
+    semver_t hardware;
+    char core_id[3];
+    char interface_hash[24];
+};
+#pragma pack(pop)
 
 // Byte-align struct data so we can send it out serially byte-by-byte.
 #pragma pack(push, 1)
@@ -71,29 +99,37 @@ struct CoreRegValues
     volatile uint8_t R_TIMESTAMP_OFFSET;
     volatile uint8_t R_UUID[16];
     uint8_t R_TAG[8];
+    uint16_t R_HEARTBEAT;
+    harp_version_reg_t R_VERSION;
 
     // Custom Constructor to initialize strings.
     CoreRegValues(uint16_t who_am_i,
-                  uint8_t hw_version_major, uint8_t hw_version_minor,
-                  uint8_t assembly_version,
-                  uint8_t harp_version_major, uint8_t harp_version_minor,
-                  uint8_t fw_version_major, uint8_t fw_version_minor,
-                  uint16_t serial_number, const char name[],
-                  const uint8_t tag[])
+                  semver_t protocol, semver_t firmware, semver_t hardware,
+                  const char name[],
+                  const uint8_t tag[],
+                  const uint8_t core_id[],
+                  const uint8_t interface_hash[])
     :R_WHO_AM_I{who_am_i},
-     R_HW_VERSION_H{hw_version_major},
-     R_HW_VERSION_L{hw_version_minor},
-     R_ASSEMBLY_VERSION{assembly_version},
-     R_HARP_VERSION_H{harp_version_major},
-     R_HARP_VERSION_L{harp_version_minor},
-     R_FW_VERSION_H{fw_version_major},
-     R_FW_VERSION_L{fw_version_minor},
+     R_HW_VERSION_H{hardware.major},
+     R_HW_VERSION_L{hardware.minor},
+     R_ASSEMBLY_VERSION{0},
+     R_HARP_VERSION_H{protocol.major},
+     R_HARP_VERSION_L{protocol.minor},
+     R_FW_VERSION_H{firmware.major},
+     R_FW_VERSION_L{firmware.minor},
      R_OPERATION_CTRL{0},
-     R_SERIAL_NUMBER{serial_number},
-     R_UUID{0} // all zeros.
+     R_SERIAL_NUMBER{0},
+     R_UUID{0}, // all zeros.
+     R_HEARTBEAT{0},
+     R_VERSION{.protocol = protocol,
+               .firmware = firmware,
+               .hardware = hardware}
     {
         strcpy((char*)R_DEVICE_NAME, name);
-        strcpy((char*)R_TAG, (char*)tag);
+        memcpy(R_TAG, tag, std::size(R_TAG));
+        memcpy(R_VERSION.core_id, core_id, std::size(R_VERSION.core_id));
+        memcpy(R_VERSION.interface_hash, interface_hash,
+               std::size(R_VERSION.interface_hash));
     }
 
     // Syntactic Sugar. Make bitfields for certain registers easier to access.
