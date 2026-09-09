@@ -5,13 +5,13 @@
 
 struct OperationCtrlBits
 {
-    unsigned OP_MODE    : 2;
-    unsigned            : 1;
-    unsigned DUMP       : 1;
-    unsigned MUTE_RPL   : 1;
-    unsigned VISUALEN   : 1;
-    unsigned OPLEDEN    : 1;
-    unsigned ALIVE_EN   : 1;
+    unsigned OP_MODE      : 2;
+    unsigned HEARTBEAT_EN : 1;
+    unsigned DUMP         : 1;
+    unsigned MUTE_RPL     : 1;
+    unsigned VISUALEN     : 1;
+    unsigned OPLEDEN      : 1;
+    unsigned ALIVE_EN     : 1;
 };
 
 

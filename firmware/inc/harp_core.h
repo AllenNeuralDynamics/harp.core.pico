@@ -171,6 +171,7 @@ public:
  * \note this function is static such that we can write functions that invoke it
  *  before instantiating the HarpCore singleton.
  * \note Calls `tud_task()`.
+ * \note will update the timestamp registers.
  * \param reply_type `READ`, `WRITE`, `EVENT`, `READ_ERROR`, or `WRITE_ERROR` enum.
  * \param reg_name address to mark the origin point of the data.
  * \param data pointer to payload content of the data.
@@ -575,11 +576,14 @@ private:
     // registers. One-per-harp-register where necessary, but read_reg_generic()
     // can be used in most cases.
     // Note: these all need to have the same function signature.
-    static void read_timestamp_second(uint8_t reg_name);
-    static void read_timestamp_microsecond(uint8_t reg_name);
-
     static void read_uuid(uint8_t reg_name);
 
+
+    static inline void update_heartbeat_register()
+    {
+        const uint8_t& state = self->regs_.r_operation_ctrl_bits.OP_MODE;
+        self->regs_.R_HEARTBEAT = ((state == ACTIVE? 1: 0) << 1) | (is_synced()? 1: 0);
+    }
 
 /**
  * \brief read the [Heartbeat][https://github.com/harp-tech/protocol/blob/main/Device.md#r_heartbeat-u16--device-status-information]
@@ -629,9 +633,9 @@ private:
      RegSpec::U8((void*)&regs_.R_FW_VERSION_L,
                  read_reg_generic, write_reg_error),
      RegSpec::U32(&regs_.R_TIMESTAMP_SECOND,
-                  read_timestamp_second, write_timestamp_second),
+                  read_reg_generic, write_timestamp_second),
      RegSpec::U16(&regs_.R_TIMESTAMP_MICRO,
-                  read_timestamp_microsecond, write_timestamp_microsecond),
+                  read_reg_generic, write_timestamp_microsecond),
      RegSpec::U8(&regs_.R_OPERATION_CTRL,
                   read_reg_generic, write_operation_ctrl),
      RegSpec::U8(&regs_.R_RESET_DEF,

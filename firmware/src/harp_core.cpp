@@ -208,18 +208,27 @@ void HarpCore::update_state(bool force, op_mode_t forced_next_state)
     {
         self->heartbeat_interval_us_ = HEARTBEAT_STANDBY_INTERVAL_US;
     }
-    // Handle OPERATION_CTRL behavior.
+    // Handle OPERATION_CTRL whole-second behavior.
     if (int32_t(time_us - self->next_heartbeat_time_us_) >= 0)
     {
         self->next_heartbeat_time_us_ += self->heartbeat_interval_us_;
-        // Dispatch heartbeat msg and Blink LED.
-        if (self->regs_.r_operation_ctrl_bits.ALIVE_EN)
+        // Handle LED tick
+        //if (self->regs_.r_operation_ctrl_bits.VISUAL_EN)
+        //    set_led(!get_led());
+        // Handle periodic messaging behavior.
+        if ((state == ACTIVE) & !is_muted())
         {
-            //if (self->regs_.r_operation_ctrl_bits.VISUALEN)
-            //    set_led(!get_led);
-            // FIXME: ALIVE_EN and TIMESTAMP_SECOND
-            if ((state == ACTIVE) & !is_muted()) // i.e: events enabled
+            // HEARTBEAT_EN takes precedence over ALIVE_EN
+            if (self->regs_.r_operation_ctrl_bits.HEARTBEAT_EN)
+            {
+                update_heartbeat_register();
+                send_harp_reply(EVENT, HEARTBEAT);
+            }
+            else if (self->regs_.r_operation_ctrl_bits.ALIVE_EN)
+            {
+                // Timestamp registers are updated automatically.
                 send_harp_reply(EVENT, TIMESTAMP_SECOND);
+            }
         }
     }
     // Handle in-state dependent output logic.
@@ -240,6 +249,8 @@ void HarpCore::send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
     msg_header_t header{reply_type, raw_length, reg_name, 255,
                         reg_type_t(std::to_underlying(HAS_TIMESTAMP) |
                                    std::to_underlying(payload_type))};
+    // Update timestamp before sending data in case we are sending the timestamp.
+    self->set_timestamp_regs(harp_time_us);
 #ifdef DEBUG_HARP_MSG_OUT
     printf("Sending msg: \r\n");
     printf("  type: %d\r\n", header.type);
@@ -264,7 +275,7 @@ void HarpCore::send_harp_reply(msg_type_t reply_type, uint8_t reg_name,
         checksum += byte;
         tud_cdc_write_char(byte);
     }
-    self->set_timestamp_regs(harp_time_us); // update and push timestamp.
+    // Push most-recently-updated timestamp.
     for (uint8_t i = 0; i < sizeof(self->regs_.R_TIMESTAMP_SECOND); ++i)
     {
         uint8_t& byte = *(((uint8_t*)(&self->regs_.R_TIMESTAMP_SECOND)) + i);
@@ -350,12 +361,6 @@ inline void HarpCore::set_timestamp_regs(uint64_t harp_time_us)
 #endif
 }
 
-void HarpCore::read_timestamp_second(uint8_t reg_name)
-{
-    self->update_timestamp_regs();
-    read_reg_generic(reg_name);
-}
-
 void HarpCore::write_timestamp_second(msg_t& msg)
 {
     uint32_t seconds;
@@ -379,13 +384,6 @@ void HarpCore::write_timestamp_second(msg_t& msg)
     // Send harp reply.
     // Note: harp timestamp registers will be updated before being dispatched.
     send_harp_reply(WRITE, msg.header.address);
-}
-
-void HarpCore::read_timestamp_microsecond(uint8_t reg_name)
-{
-    // Update register. Then trigger a generic register read.
-    self->update_timestamp_regs();
-    read_reg_generic(reg_name);
 }
 
 void HarpCore::write_timestamp_microsecond(msg_t& msg)
@@ -486,6 +484,6 @@ void HarpCore::read_heartbeat(uint8_t reg_name)
 {
     if (HarpCore::is_muted())
         return;
-    const uint8_t& state = self->regs_.r_operation_ctrl_bits.OP_MODE;
-    self->regs_.R_HEARTBEAT = ((state == ACTIVE? 1: 0) << 1) | (is_synced()? 1: 0);
+    update_heartbeat_register();
+    send_harp_reply(READ, reg_name);
 }
