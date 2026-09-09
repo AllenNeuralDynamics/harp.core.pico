@@ -73,7 +73,7 @@ struct harp_version_reg_t
     semver_t firmware;
     semver_t hardware;
     char core_id[3];
-    char interface_hash[24];
+    char interface_hash[20];
 };
 #pragma pack(pop)
 
@@ -123,13 +123,14 @@ struct CoreRegValues
      R_HEARTBEAT{0},
      R_VERSION{.protocol = protocol,
                .firmware = firmware,
-               .hardware = hardware}
+               .hardware = hardware,
+               .interface_hash = {0}}
     {
         strcpy((char*)R_DEVICE_NAME, name);
-        memcpy(R_TAG, tag, std::size(R_TAG));
-        memcpy(R_VERSION.core_id, core_id, std::size(R_VERSION.core_id));
+        memcpy(R_TAG, tag, sizeof(R_TAG));
+        memcpy(R_VERSION.core_id, core_id, sizeof(harp_version_reg_t::core_id));
         memcpy(R_VERSION.interface_hash, interface_hash,
-               std::size(R_VERSION.interface_hash));
+            sizeof(harp_version_reg_t::interface_hash));
     }
 
     // Syntactic Sugar. Make bitfields for certain registers easier to access.
