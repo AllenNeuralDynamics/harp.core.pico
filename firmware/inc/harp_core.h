@@ -363,6 +363,16 @@ public:
     static void set_visual_indicators_fn(void (*func)(bool))
     {self->set_visual_indicators_fn_ = func;}
 
+
+/**
+ * \brief attach a handler function for dealing with writes to the
+ * r_clock_config register.
+ * \warning like all other write handler functions, this function must send
+ * a harp reply at the end of the function only if the device is not muted.
+ */
+    static void set_r_clock_config_write_handler(void (*func)(msg_t&))
+    {self->handle_r_clock_config_write_fn_ = func;}
+
 /**
  * \brief force the op mode state. Useful to put the core in an error state.
  */
@@ -430,6 +440,7 @@ protected:
     {if (set_visual_indicators_fn_ != nullptr)
         set_visual_indicators_fn_(enabled);}
 
+
 /**
  * \brief send one harp reply read message per app register.
  *  Called when the writing to the R_OPERATION_CTRL's DUMP bit.
@@ -450,6 +461,12 @@ protected:
  * \brief function pointer to function that enables/disables visual indicators.
  */
     void (* set_visual_indicators_fn_)(bool);
+
+/**
+ * \brief function pointer. if not null, call this function when writing to
+ * the `R_CLOCK_CONFIG` register.
+ */
+    void (* handle_r_clock_config_write_fn_)(msg_t&);
 
 /**
  * \brief function pointer to synchronizer if configured.
@@ -591,6 +608,13 @@ private:
  */
     static void read_heartbeat(uint8_t reg_name);
 
+/**
+ * \brief identify (via underlying register) whether this device is a clock
+ * generator (false by default).
+ */
+    static inline void set_is_clock_generator(bool is_clock_gen)
+    {self->regs_.r_clock_config_bits.CLK_GEN = is_clock_gen;}
+
 
     // write handler function per core register. Handles write
     // operations to that register.
@@ -610,6 +634,8 @@ private:
 
     static void write_operation_ctrl(msg_t& msg);
     static void write_reset_dev(msg_t& msg);
+
+    static void write_r_clock_config_default(msg_t& msg);
 
     CoreRegValues regs_; ///< struct of Harp core register values.
 
@@ -645,9 +671,9 @@ private:
      RegSpec::U16(&regs_.R_SERIAL_NUMBER,
                   read_reg_generic, write_reg_generic),
      RegSpec::U8(&regs_.R_CLOCK_CONFIG,
-                 read_reg_generic, write_reg_generic),
+                 read_reg_generic, write_r_clock_config_default),
      RegSpec::U8(&regs_.R_TIMESTAMP_OFFSET,
-                 read_reg_generic, write_reg_generic),
+                 read_reg_generic, write_reg_error),
      RegSpec::U8Array(&regs_.R_UUID, sizeof(regs_.R_UUID),
                       read_uuid, write_reg_error),
      RegSpec::U8Array(&regs_.R_TAG, sizeof(regs_.R_TAG),

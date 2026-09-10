@@ -96,7 +96,7 @@ struct CoreRegValues
     volatile char R_DEVICE_NAME[25];
     volatile uint16_t R_SERIAL_NUMBER;
     volatile uint8_t R_CLOCK_CONFIG;
-    volatile uint8_t R_TIMESTAMP_OFFSET;
+    volatile uint8_t R_TIMESTAMP_OFFSET;  // Deprecated.
     volatile uint8_t R_UUID[16];
     uint8_t R_TAG[8];
     uint16_t R_HEARTBEAT;
@@ -119,6 +119,8 @@ struct CoreRegValues
      R_FW_VERSION_L{firmware.minor},
      R_OPERATION_CTRL{0},
      R_SERIAL_NUMBER{0},
+     R_CLOCK_CONFIG{0},
+     R_TIMESTAMP_OFFSET{0},
      R_UUID{0}, // all zeros.
      R_HEARTBEAT{0},
      R_VERSION{.protocol = protocol,

@@ -19,7 +19,8 @@ HarpCore::HarpCore(uint16_t who_am_i, semver_t firmware, semver_t hardware,
 :regs_{who_am_i, HARP_PROTOCOL, firmware, hardware, name, tag, RPI_CORE_ID,
        interface_hash},
  rx_buffer_index_{0}, total_bytes_read_{rx_buffer_index_}, new_msg_{false},
- set_visual_indicators_fn_{nullptr}, sync_{nullptr}, offset_us_64_{0},
+ set_visual_indicators_fn_{nullptr}, handle_r_clock_config_write_fn_{nullptr},
+ sync_{nullptr}, offset_us_64_{0},
  disconnect_handled_{false}, connect_handled_{false}, sync_handled_{false},
  heartbeat_interval_us_{HEARTBEAT_STANDBY_INTERVAL_US}
 {
@@ -462,6 +463,16 @@ void HarpCore::write_reset_dev(msg_t& msg)
     if (!HarpCore::is_muted())
         send_harp_reply(WRITE, msg.header.address);
     // TODO: handle the other bit-specific operations.
+}
+
+void HarpCore::write_r_clock_config_default(msg_t& msg)
+{
+    if (self->handle_r_clock_config_write_fn_ != nullptr)
+    {
+        self->handle_r_clock_config_write_fn_(msg);
+        return;
+    }
+    write_reg_error(msg); // default behavior.
 }
 
 void HarpCore::read_uuid(uint8_t reg_name)
